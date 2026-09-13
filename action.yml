@@ -8,6 +8,9 @@ outputs:
   result:
     description: "Stable guard result: pass, recurrence, invalid, or indeterminate."
     value: ${{ steps.guard.outputs.result }}
+  manifest:
+    description: Sanitized selection manifest path when configuration exists.
+    value: ${{ steps.guard.outputs.manifest }}
 runs:
   using: composite
   steps:
@@ -19,6 +22,11 @@ runs:
         set -o pipefail
         args=()
         while IFS= read -r path; do args+=(--changed "$path"); done <<< "${{ inputs.changed-paths }}"
+        if [ -f aegis.yaml ]; then
+          aegis select --manifest "${args[@]}" >/dev/null
+          manifest="$(find .aegis/manifests -maxdepth 1 -name '*.json' -print -quit)"
+          echo "manifest=$manifest" >> "$GITHUB_OUTPUT"
+        fi
         set +e
         output="$(aegis guard "${args[@]}")"
         status=$?
