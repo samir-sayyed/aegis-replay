@@ -52,7 +52,9 @@ def main(argv: list[str] | None = None) -> int:
     approval.add_argument("--required-owner", action="append", required=True)
     guard_parser = commands.add_parser("guard", help="run deterministic approved PR guards")
     guard_parser.add_argument("--directory", default=".")
-    guard_parser.add_argument("--changed", action="append", required=True)
+    guard_group = guard_parser.add_mutually_exclusive_group(required=True)
+    guard_group.add_argument("--changed", action="append")
+    guard_group.add_argument("--all", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "init":
         destination = Path(args.directory) / "aegis.yaml"
@@ -64,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     repository = Path(args.directory).resolve()
     if args.command == "guard":
-        result = guard(repository, args.changed)
+        result = guard(repository, ["*"] if args.all else args.changed)
         print(f"Aegis guard: {result}")
         return 0 if result == "pass" else 1
     if args.command == "approve":

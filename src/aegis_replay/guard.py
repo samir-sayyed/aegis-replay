@@ -19,7 +19,7 @@ def guard(repository: Path, changed_paths: list[str]) -> str:
         identifier = path.stem
         try:
             antibody = load(repository, identifier)
-            if not _matches(antibody.scope, changed_paths):
+            if "*" not in changed_paths and not _matches(antibody.scope, changed_paths):
                 continue
             if freshness(repository, identifier) != "fresh" or not _approved(repository, identifier):
                 return "invalid"
