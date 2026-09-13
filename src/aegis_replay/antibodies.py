@@ -64,9 +64,9 @@ def load(repository: Path, identifier: str) -> Antibody:
     return antibody
 
 
-def explain(antibody: Antibody) -> str:
+def explain(antibody: Antibody, freshness: str = "unproved") -> str:
     tests = ", ".join(f"{test['class']}#{test['name']}" for test in antibody.tests)
-    return "\n".join((f"Artifact: {antibody.id}", f"State: {antibody.state}", f"Invariant: {antibody.invariant}", f"Target: {antibody.target}", f"Tests: {tests}", f"Scope: {', '.join(antibody.scope)}", "Freshness: unproved" if antibody.state == "draft" else "Freshness: unknown"))
+    return "\n".join((f"Artifact: {antibody.id}", f"State: {antibody.state}", f"Invariant: {antibody.invariant}", f"Target: {antibody.target}", f"Tests: {tests}", f"Scope: {', '.join(antibody.scope)}", f"Freshness: {freshness}"))
 
 
 def _validate(antibody: Antibody, repository: Path) -> None:

@@ -10,6 +10,7 @@ import yaml
 from .antibodies import AntibodyError, create as create_antibody, explain as explain_antibody, load as load_antibody
 from .config import ConfigurationError, load_target
 from .doctor import DoctorError, diagnose
+from .proof import ProofError, freshness as proof_freshness, prove
 
 DEFAULT_CONFIG = {"schema_version": 1, "targets": [{"name": "default", "runner": "command-junit", "command": ["python", "-m", "pytest", "--junitxml=reports/junit.xml"], "junit_xml": "reports/junit.xml"}]}
 
@@ -36,6 +37,12 @@ def main(argv: list[str] | None = None) -> int:
     explain = antibody_commands.add_parser("explain", help="display an antibody without sensitive data")
     explain.add_argument("id")
     explain.add_argument("--directory", default=".")
+    proof = commands.add_parser("prove", help="prove an antibody in three isolated Git states")
+    proof.add_argument("id")
+    proof.add_argument("--directory", default=".")
+    proof.add_argument("--known-bad", required=True)
+    proof.add_argument("--alternate-bad", required=True)
+    proof.add_argument("--control", required=True)
     args = parser.parse_args(argv)
     if args.command == "init":
         destination = Path(args.directory) / "aegis.yaml"
@@ -46,13 +53,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Created {destination}")
         return 0
     repository = Path(args.directory).resolve()
+    if args.command == "prove":
+        try:
+            record = prove(repository, load_antibody(repository, args.id), Path(args.known_bad).resolve(), Path(args.alternate_bad).resolve(), args.control)
+            print(f"Aegis proof: verified {record.relative_to(repository)}")
+        except (AntibodyError, ProofError) as error:
+            print(f"Aegis proof: {error}")
+            return 1
+        return 0
     if args.command == "antibody":
         try:
             if args.antibody_command == "create":
                 record = create_antibody(repository, args.id, args.invariant, args.target, args.test, args.scope, args.proof_input)
                 print(f"Created {record.relative_to(repository)}")
             else:
-                print(explain_antibody(load_antibody(repository, args.id)))
+                print(explain_antibody(load_antibody(repository, args.id), proof_freshness(repository, args.id)))
         except AntibodyError as error:
             print(f"Aegis antibody: {error}")
             return 1
