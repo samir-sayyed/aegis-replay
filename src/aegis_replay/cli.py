@@ -7,6 +7,7 @@ from pathlib import Path
 
 import yaml
 
+from .antibodies import AntibodyError, create as create_antibody, explain as explain_antibody, load as load_antibody
 from .config import ConfigurationError, load_target
 from .doctor import DoctorError, diagnose
 
@@ -22,6 +23,19 @@ def main(argv: list[str] | None = None) -> int:
     doctor.add_argument("--directory", default=".")
     doctor.add_argument("--config", default="aegis.yaml")
     doctor.add_argument("--target", default="default")
+    antibody = commands.add_parser("antibody", help="create and inspect local antibodies")
+    antibody_commands = antibody.add_subparsers(dest="antibody_command", required=True)
+    create = antibody_commands.add_parser("create", help="store a strict antibody record")
+    create.add_argument("id")
+    create.add_argument("--directory", default=".")
+    create.add_argument("--invariant", required=True)
+    create.add_argument("--target", required=True)
+    create.add_argument("--test", action="append", required=True)
+    create.add_argument("--scope", action="append", required=True)
+    create.add_argument("--proof-input", action="append", required=True)
+    explain = antibody_commands.add_parser("explain", help="display an antibody without sensitive data")
+    explain.add_argument("id")
+    explain.add_argument("--directory", default=".")
     args = parser.parse_args(argv)
     if args.command == "init":
         destination = Path(args.directory) / "aegis.yaml"
@@ -32,6 +46,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Created {destination}")
         return 0
     repository = Path(args.directory).resolve()
+    if args.command == "antibody":
+        try:
+            if args.antibody_command == "create":
+                record = create_antibody(repository, args.id, args.invariant, args.target, args.test, args.scope, args.proof_input)
+                print(f"Created {record.relative_to(repository)}")
+            else:
+                print(explain_antibody(load_antibody(repository, args.id)))
+        except AntibodyError as error:
+            print(f"Aegis antibody: {error}")
+            return 1
+        return 0
     try:
         target = load_target(repository / args.config, args.target)
         result = diagnose(target, repository)
