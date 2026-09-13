@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from aegis_replay.approval import github_review
+
 
 def cli(directory: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run([sys.executable, "-m", "aegis_replay", *arguments], capture_output=True, text=True, check=False)
@@ -50,3 +52,13 @@ def test_approval_rejects_stale_or_dismissed_review(tmp_path: Path) -> None:
     dismissed = cli(dismissed_directory, "approve", "demo", "--directory", str(dismissed_directory), "--github-fixture", str(dismissed_fixture), "--required-owner", "alice")
     assert dismissed.returncode == 1
     assert "no valid" in dismissed.stdout
+
+
+def test_github_review_reads_canonical_pull_head_and_reviews() -> None:
+    replies = {
+        "repos/acme/replay/pulls/42": {"head": {"sha": "a" * 40}},
+        "repos/acme/replay/pulls/42/reviews?per_page=100": [{"user": {"login": "alice"}, "state": "APPROVED", "commit_id": "a" * 40}],
+    }
+    review = github_review("acme/replay", 42, request=replies.__getitem__)
+    assert review["pull_request"]["head"]["sha"] == "a" * 40
+    assert review["reviews"][0]["user"]["login"] == "alice"

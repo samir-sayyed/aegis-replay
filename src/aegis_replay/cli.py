@@ -48,7 +48,10 @@ def main(argv: list[str] | None = None) -> int:
     approval = commands.add_parser("approve", help="verify canonical GitHub review approval")
     approval.add_argument("id")
     approval.add_argument("--directory", default=".")
-    approval.add_argument("--github-fixture", required=True)
+    approval_source = approval.add_mutually_exclusive_group(required=True)
+    approval_source.add_argument("--github-fixture")
+    approval_source.add_argument("--github-repository")
+    approval.add_argument("--pull-number", type=int)
     approval.add_argument("--required-owner", action="append", required=True)
     guard_parser = commands.add_parser("guard", help="run deterministic approved PR guards")
     guard_parser.add_argument("--directory", default=".")
@@ -71,7 +74,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result == "pass" else 1
     if args.command == "approve":
         try:
-            record = approve(repository, args.id, Path(args.github_fixture).resolve(), args.required_owner)
+            if args.github_repository and args.pull_number is None:
+                parser.error("--pull-number is required with --github-repository")
+            record = approve(
+                repository,
+                args.id,
+                Path(args.github_fixture).resolve() if args.github_fixture else None,
+                args.required_owner,
+                args.github_repository,
+                args.pull_number,
+            )
             print(f"Aegis approval: verified {record.relative_to(repository)}")
         except ApprovalError as error:
             print(f"Aegis approval: {error}")
