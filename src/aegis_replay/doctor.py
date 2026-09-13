@@ -48,7 +48,8 @@ def _verify_junit(result_path: Path) -> None:
     except (OSError, ET.ParseError) as error:
         raise DoctorError(f"invalid JUnit XML: {error}") from error
     tests = root.findall(".//testcase") if root.tag != "testcase" else [root]
-    if len(tests) != 1:
-        raise DoctorError(f"JUnit result must contain exactly one testcase, found {len(tests)}")
-    if tests[0].find("failure") is not None or tests[0].find("error") is not None or tests[0].find("skipped") is not None:
+    executed = [test for test in tests if test.find("skipped") is None]
+    if len(executed) != 1:
+        raise DoctorError(f"JUnit result must contain exactly one executed testcase, found {len(executed)}")
+    if executed[0].find("failure") is not None or executed[0].find("error") is not None:
         raise DoctorError("JUnit testcase did not pass")

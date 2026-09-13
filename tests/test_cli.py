@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 
 def invoke(*arguments: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([sys.executable, "-m", "aegis_replay", *arguments], capture_output=True, text=True, check=False)
+    environment = {**os.environ, "PYTHONPATH": str(Path(__file__).parents[1] / "src")}
+    return subprocess.run(
+        [sys.executable, "-m", "aegis_replay", *arguments], capture_output=True, text=True, check=False, env=environment
+    )
 
 
 def test_init_creates_versioned_generic_target(tmp_path: Path) -> None:
@@ -23,6 +27,19 @@ def test_doctor_executes_one_passing_test_and_verifies_junit(tmp_path: Path) -> 
     result = invoke("doctor", "--directory", str(tmp_path), "--target", "fixture")
     assert result.returncode == 0, result.stdout
     assert "verified fixture" in result.stdout
+
+
+def test_doctor_allows_skipped_junit_cases_when_one_case_executed(tmp_path: Path) -> None:
+    (tmp_path / "make_junit.py").write_text(
+        "from pathlib import Path\n"
+        "Path('result.xml').write_text('<testsuite><testcase classname=\"fixture\" name=\"passes\"/><testcase classname=\"fixture\" name=\"not-selected\"><skipped/></testcase></testsuite>')\n"
+    )
+    (tmp_path / "aegis.yaml").write_text(
+        "schema_version: 1\ntargets:\n  - name: fixture\n    runner: command-junit\n"
+        "    command: ['" + sys.executable + "', 'make_junit.py']\n    junit_xml: result.xml\n"
+    )
+    result = invoke("doctor", "--directory", str(tmp_path), "--target", "fixture")
+    assert result.returncode == 0, result.stdout
 
 
 def test_doctor_rejects_shell_syntax(tmp_path: Path) -> None:
