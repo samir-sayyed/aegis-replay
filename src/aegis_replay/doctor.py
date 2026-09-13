@@ -32,6 +32,17 @@ def diagnose(target: Target, repository: Path) -> Path:
     return result_paths[0]
 
 
+def diagnose_identities(target: Target, repository: Path, identities: list[tuple[str, str]]) -> Path:
+    """Run one target and verify each requested JUnit identity passed exactly once."""
+    working_directory = repository / target.directory
+    _run(target, working_directory)
+    result_paths = list(working_directory.glob(target.junit_xml))
+    if len(result_paths) != 1:
+        raise DoctorError(f"expected exactly one JUnit result, found {len(result_paths)}")
+    _verify_identities(result_paths[0], identities)
+    return result_paths[0]
+
+
 def _run(target: Target, repository: Path) -> None:
     environment = {"PATH": os.environ.get("PATH", ""), **target.environment}
     try:
@@ -53,3 +64,22 @@ def _verify_junit(result_path: Path) -> None:
         raise DoctorError(f"JUnit result must contain exactly one executed testcase, found {len(executed)}")
     if executed[0].find("failure") is not None or executed[0].find("error") is not None:
         raise DoctorError("JUnit testcase did not pass")
+
+
+def _verify_identities(result_path: Path, identities: list[tuple[str, str]]) -> None:
+    try:
+        root = ET.parse(result_path).getroot()
+    except (OSError, ET.ParseError) as error:
+        raise DoctorError(f"invalid JUnit XML: {error}") from error
+    expected = set(identities)
+    if len(expected) != len(identities):
+        raise DoctorError("expected JUnit identities must be unique")
+    found: dict[tuple[str, str], list[ET.Element]] = {}
+    for case in root.findall(".//testcase") if root.tag != "testcase" else [root]:
+        identity = (case.attrib.get("classname", ""), case.attrib.get("name", ""))
+        if identity in expected:
+            found.setdefault(identity, []).append(case)
+    if set(found) != expected or any(len(cases) != 1 for cases in found.values()):
+        raise DoctorError("JUnit result is missing or duplicates an exact antibody testcase")
+    if any(case.find("failure") is not None or case.find("error") is not None or case.find("skipped") is not None for cases in found.values() for case in cases):
+        raise DoctorError("exact antibody JUnit testcase did not pass")

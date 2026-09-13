@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .antibodies import AntibodyError, load
 from .approval import ApprovalError, _git_head
-from .doctor import DoctorError, diagnose
+from .doctor import DoctorError, diagnose_identities
 from .proof import freshness
 from .config import load_target
 
@@ -30,7 +30,7 @@ def guard(repository: Path, changed_paths: list[str]) -> str:
         return "pass"
     for antibody in selected:
         try:
-            diagnose(load_target(repository / "aegis.yaml", antibody.target), repository)
+            diagnose_identities(load_target(repository / "aegis.yaml", antibody.target), repository, [(test["class"], test["name"]) for test in antibody.tests])
         except DoctorError:
             return "recurrence"
     return "pass"

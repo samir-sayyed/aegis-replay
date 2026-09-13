@@ -20,7 +20,7 @@ def git(directory: Path, *arguments: str) -> str:
 
 
 def setup_guard(directory: Path) -> None:
-    (directory / "run.py").write_text("from pathlib import Path\nPath('result.xml').write_text('<testsuite><testcase classname=\"x\" name=\"y\"/></testsuite>')\n")
+    (directory / "run.py").write_text("from pathlib import Path\nPath('result.xml').write_text('<testsuite><testcase classname=\"x\" name=\"y\"/><testcase classname=\"x\" name=\"control\"/></testsuite>')\n")
     (directory / "aegis.yaml").write_text("schema_version: 1\ntargets:\n  - name: unit\n    runner: command-junit\n    command: ['" + sys.executable + "', 'run.py']\n    junit_xml: result.xml\n")
     git(directory, "init")
     git(directory, "add", ".")
