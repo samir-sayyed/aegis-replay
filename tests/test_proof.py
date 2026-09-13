@@ -4,7 +4,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from aegis_replay.config import Target
 from aegis_replay.jira import capture
+from aegis_replay.proof import _run_state
 
 
 def run(directory: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -52,3 +54,18 @@ def test_prove_verifies_three_isolated_states_and_records_inputs(tmp_path: Path)
     (tmp_path / "aegis.yaml").write_text((tmp_path / "aegis.yaml").read_text() + "# changed\n")
     stale = run(tmp_path, "antibody", "explain", "proof-demo", "--directory", str(tmp_path))
     assert "Freshness: stale" in stale.stdout
+
+
+def test_proof_runs_target_in_declared_directory_and_resolves_junit_glob(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "runner.py").write_text(
+        "from pathlib import Path\n"
+        "Path('reports').mkdir()\n"
+        "Path('reports/result.xml').write_text('<testsuite><testcase classname=\"fixture\" name=\"target\"/><testcase classname=\"fixture\" name=\"control\"/></testsuite>')\n"
+    )
+    git(tmp_path, "init")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "base")
+    target = Target("nested", (sys.executable, "runner.py"), "reports/*.xml", {}, "project", ())
+    _run_state(tmp_path, target, "fixed", None, [("fixture", "target"), ("fixture", "control")], True)

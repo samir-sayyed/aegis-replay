@@ -78,10 +78,20 @@ def _run_state(repository: Path, target: Target, name: str, patch: Path | None, 
             if patch is not None:
                 _git(workspace, "apply", "--check", str(patch))
                 _git(workspace, "apply", str(patch))
-            result = subprocess.run(target.command, cwd=workspace, env={"PATH": os.environ.get("PATH", "")}, capture_output=True, text=True, check=False, timeout=120)
-            output = workspace / target.junit_xml
-            if not output.is_file():
-                raise ProofError(f"{name}: command did not produce JUnit XML")
+            working_directory = workspace / target.directory
+            result = subprocess.run(
+                target.command,
+                cwd=working_directory,
+                env={"PATH": os.environ.get("PATH", ""), **target.environment},
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=120,
+            )
+            outputs = list(working_directory.glob(target.junit_xml))
+            if len(outputs) != 1:
+                raise ProofError(f"{name}: expected exactly one JUnit XML result, found {len(outputs)}")
+            output = outputs[0]
             actual = _junit_outcomes(output)
             if set(actual) != set(expected) or any(actual[item] != passing for item in expected):
                 raise ProofError(f"{name}: JUnit outcomes do not match exact expected tests")
