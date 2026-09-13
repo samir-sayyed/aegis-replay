@@ -11,6 +11,7 @@ from .antibodies import AntibodyError, create as create_antibody, explain as exp
 from .config import ConfigurationError, load_target
 from .doctor import DoctorError, diagnose
 from .proof import ProofError, freshness as proof_freshness, prove
+from .approval import ApprovalError, approve
 
 DEFAULT_CONFIG = {"schema_version": 1, "targets": [{"name": "default", "runner": "command-junit", "command": ["python", "-m", "pytest", "--junitxml=reports/junit.xml"], "junit_xml": "reports/junit.xml"}]}
 
@@ -43,6 +44,11 @@ def main(argv: list[str] | None = None) -> int:
     proof.add_argument("--known-bad", required=True)
     proof.add_argument("--alternate-bad", required=True)
     proof.add_argument("--control", required=True)
+    approval = commands.add_parser("approve", help="verify canonical GitHub review approval")
+    approval.add_argument("id")
+    approval.add_argument("--directory", default=".")
+    approval.add_argument("--github-fixture", required=True)
+    approval.add_argument("--required-owner", action="append", required=True)
     args = parser.parse_args(argv)
     if args.command == "init":
         destination = Path(args.directory) / "aegis.yaml"
@@ -53,6 +59,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Created {destination}")
         return 0
     repository = Path(args.directory).resolve()
+    if args.command == "approve":
+        try:
+            record = approve(repository, args.id, Path(args.github_fixture).resolve(), args.required_owner)
+            print(f"Aegis approval: verified {record.relative_to(repository)}")
+        except ApprovalError as error:
+            print(f"Aegis approval: {error}")
+            return 1
+        return 0
     if args.command == "prove":
         try:
             record = prove(repository, load_antibody(repository, args.id), Path(args.known_bad).resolve(), Path(args.alternate_bad).resolve(), args.control)
