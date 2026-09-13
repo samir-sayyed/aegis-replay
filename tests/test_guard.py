@@ -6,6 +6,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from aegis_replay.antibodies import load
+from aegis_replay.config import load_target
+from aegis_replay.proof import _current_inputs
+
 
 def cli(directory: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run([sys.executable, "-m", "aegis_replay", *arguments], capture_output=True, text=True, check=False)
@@ -26,9 +30,15 @@ def setup_guard(directory: Path) -> None:
     git(directory, "add", ".aegis")
     git(directory, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "antibody")
     head = git(directory, "rev-parse", "HEAD")
+    inputs = directory / ".aegis" / "proof-inputs" / "guard-demo"
+    inputs.mkdir(parents=True)
+    (inputs / "known-bad.patch").write_text("known")
+    (inputs / "alternate-bad.patch").write_text("alternate")
     proof = directory / ".aegis" / "proofs" / "guard-demo.json"
     proof.parent.mkdir(exist_ok=True)
-    proof.write_text(json.dumps({"source_revision": head, "inputs": {"configuration_sha256": hashlib.sha256((directory / "aegis.yaml").read_bytes()).hexdigest()}}))
+    antibody = load(directory, "guard-demo")
+    target = load_target(directory / "aegis.yaml", antibody.target)
+    proof.write_text(json.dumps({"source_revision": head, "inputs": _current_inputs(directory, antibody, target)}))
     digest = hashlib.sha256(proof.read_bytes()).hexdigest()
     approval = directory / ".aegis" / "approvals" / "guard-demo.json"
     approval.parent.mkdir(exist_ok=True)

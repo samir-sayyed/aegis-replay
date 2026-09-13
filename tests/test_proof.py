@@ -36,6 +36,12 @@ def test_prove_verifies_three_isolated_states_and_records_inputs(tmp_path: Path)
     assert '"state": "proved"' in (tmp_path / ".aegis" / "proofs" / "proof-demo.json").read_text()
     explained = run(tmp_path, "antibody", "explain", "proof-demo", "--directory", str(tmp_path))
     assert "Freshness: fresh" in explained.stdout
+    mutation_input = tmp_path / ".aegis" / "proof-inputs" / "proof-demo" / "known-bad.patch"
+    assert mutation_input.is_file()
+    mutation_input.write_text("changed mutation input\n")
+    stale_mutation = run(tmp_path, "antibody", "explain", "proof-demo", "--directory", str(tmp_path))
+    assert "Freshness: stale" in stale_mutation.stdout
+    mutation_input.write_text(known.read_text())
     (tmp_path / "aegis.yaml").write_text((tmp_path / "aegis.yaml").read_text() + "# changed\n")
     stale = run(tmp_path, "antibody", "explain", "proof-demo", "--directory", str(tmp_path))
     assert "Freshness: stale" in stale.stdout

@@ -5,12 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from .antibodies import Antibody, AntibodyError
+from .antibodies import Antibody, AntibodyError, load
 from .config import Target, load_target
 
 
@@ -28,19 +29,26 @@ def prove(repository: Path, antibody: Antibody, known_bad: Path, alternate_bad: 
     _run_state(repository, target, "fixed", None, target_identities + [control_identity], True)
     _run_state(repository, target, "known_bad", known_bad, target_identities, False)
     _run_state(repository, target, "alternate_bad", alternate_bad, target_identities, False)
+    inputs_directory = repository / ".aegis" / "proof-inputs" / antibody.id
+    inputs_directory.mkdir(parents=True, exist_ok=True)
+    known_input = inputs_directory / "known-bad.patch"
+    alternate_input = inputs_directory / "alternate-bad.patch"
+    shutil.copyfile(known_bad, known_input)
+    shutil.copyfile(alternate_bad, alternate_input)
     proof = {
         "schema_version": 1,
         "antibody_id": antibody.id,
         "state": "proved",
         "source_revision": _git(repository, "rev-parse", "HEAD").strip(),
         "inputs": {
+            "source_sha256": _hash_text(_git(repository, "rev-parse", "HEAD").strip()),
             "configuration_sha256": _hash_file(repository / "aegis.yaml"),
             "tests_sha256": _hash_text(json.dumps(antibody.tests, sort_keys=True)),
-            "known_bad_mutation_sha256": _hash_file(known_bad),
-            "alternate_bad_mutation_sha256": _hash_file(alternate_bad),
+            "known_bad_mutation_sha256": _hash_file(known_input),
+            "alternate_bad_mutation_sha256": _hash_file(alternate_input),
             "parser_sha256": _hash_file(Path(__file__)),
             "schema_sha256": _hash_text("antibody-v1|proof-v1"),
-            "execution_sha256": _hash_text(json.dumps(list(target.command))),
+            "execution_sha256": _hash_text(json.dumps(_execution_input(target), sort_keys=True)),
         },
         "states": {"known_bad": "target-failed", "fixed": "target-and-control-passed", "alternate_bad": "target-failed"},
     }
@@ -61,10 +69,13 @@ def freshness(repository: Path, antibody_id: str) -> str:
         return "stale"
     if proof.get("source_revision") != current:
         return "stale"
-    inputs = proof.get("inputs", {})
-    if inputs.get("configuration_sha256") != _hash_file(repository / "aegis.yaml"):
+    try:
+        antibody = load(repository, antibody_id)
+        target = load_target(repository / "aegis.yaml", antibody.target)
+        expected = _current_inputs(repository, antibody, target)
+    except (AntibodyError, OSError, ProofError):
         return "stale"
-    return "fresh"
+    return "fresh" if proof.get("inputs") == expected else "stale"
 
 
 def _run_state(repository: Path, target: Target, name: str, patch: Path | None, expected: list[tuple[str, str]], passing: bool) -> None:
@@ -133,3 +144,21 @@ def _hash_file(path: Path) -> str:
 
 def _hash_text(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _current_inputs(repository: Path, antibody: Antibody, target: Target) -> dict[str, str]:
+    inputs_directory = repository / ".aegis" / "proof-inputs" / antibody.id
+    return {
+        "source_sha256": _hash_text(_git(repository, "rev-parse", "HEAD").strip()),
+        "configuration_sha256": _hash_file(repository / "aegis.yaml"),
+        "tests_sha256": _hash_text(json.dumps(antibody.tests, sort_keys=True)),
+        "known_bad_mutation_sha256": _hash_file(inputs_directory / "known-bad.patch"),
+        "alternate_bad_mutation_sha256": _hash_file(inputs_directory / "alternate-bad.patch"),
+        "parser_sha256": _hash_file(Path(__file__)),
+        "schema_sha256": _hash_text("antibody-v1|proof-v1"),
+        "execution_sha256": _hash_text(json.dumps(_execution_input(target), sort_keys=True)),
+    }
+
+
+def _execution_input(target: Target) -> dict[str, object]:
+    return {"command": target.command, "directory": target.directory, "environment": target.environment, "junit_xml": target.junit_xml}
