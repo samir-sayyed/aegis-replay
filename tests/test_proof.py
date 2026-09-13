@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from aegis_replay.jira import capture
+
 
 def run(directory: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run([sys.executable, "-m", "aegis_replay", *arguments], capture_output=True, text=True, check=False)
@@ -42,6 +44,11 @@ def test_prove_verifies_three_isolated_states_and_records_inputs(tmp_path: Path)
     stale_mutation = run(tmp_path, "antibody", "explain", "proof-demo", "--directory", str(tmp_path))
     assert "Freshness: stale" in stale_mutation.stdout
     mutation_input.write_text(known.read_text())
+    refreshed = run(tmp_path, "antibody", "explain", "proof-demo", "--directory", str(tmp_path))
+    assert "Freshness: fresh" in refreshed.stdout
+    capture(tmp_path, {"key": "APP-42", "fields": {"summary": "Restore", "acceptance_criteria": "Audio returns"}}, "APP-42", antibody_id="proof-demo")
+    stale_jira = run(tmp_path, "antibody", "explain", "proof-demo", "--directory", str(tmp_path))
+    assert "Freshness: stale" in stale_jira.stdout
     (tmp_path / "aegis.yaml").write_text((tmp_path / "aegis.yaml").read_text() + "# changed\n")
     stale = run(tmp_path, "antibody", "explain", "proof-demo", "--directory", str(tmp_path))
     assert "Freshness: stale" in stale.stdout

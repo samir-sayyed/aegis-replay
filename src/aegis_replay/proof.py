@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .antibodies import Antibody, AntibodyError, load
 from .config import Target, load_target
+from .jira import JiraError, linked_content_hash
 
 
 class ProofError(RuntimeError):
@@ -40,16 +41,7 @@ def prove(repository: Path, antibody: Antibody, known_bad: Path, alternate_bad: 
         "antibody_id": antibody.id,
         "state": "proved",
         "source_revision": _git(repository, "rev-parse", "HEAD").strip(),
-        "inputs": {
-            "source_sha256": _hash_text(_git(repository, "rev-parse", "HEAD").strip()),
-            "configuration_sha256": _hash_file(repository / "aegis.yaml"),
-            "tests_sha256": _hash_text(json.dumps(antibody.tests, sort_keys=True)),
-            "known_bad_mutation_sha256": _hash_file(known_input),
-            "alternate_bad_mutation_sha256": _hash_file(alternate_input),
-            "parser_sha256": _hash_file(Path(__file__)),
-            "schema_sha256": _hash_text("antibody-v1|proof-v1"),
-            "execution_sha256": _hash_text(json.dumps(_execution_input(target), sort_keys=True)),
-        },
+        "inputs": _current_inputs(repository, antibody, target),
         "states": {"known_bad": "target-failed", "fixed": "target-and-control-passed", "alternate_bad": "target-failed"},
     }
     destination = repository / ".aegis" / "proofs" / f"{antibody.id}.json"
@@ -73,7 +65,7 @@ def freshness(repository: Path, antibody_id: str) -> str:
         antibody = load(repository, antibody_id)
         target = load_target(repository / "aegis.yaml", antibody.target)
         expected = _current_inputs(repository, antibody, target)
-    except (AntibodyError, OSError, ProofError):
+    except (AntibodyError, JiraError, OSError, ProofError):
         return "stale"
     return "fresh" if proof.get("inputs") == expected else "stale"
 
@@ -148,7 +140,7 @@ def _hash_text(value: str) -> str:
 
 def _current_inputs(repository: Path, antibody: Antibody, target: Target) -> dict[str, str]:
     inputs_directory = repository / ".aegis" / "proof-inputs" / antibody.id
-    return {
+    inputs = {
         "source_sha256": _hash_text(_git(repository, "rev-parse", "HEAD").strip()),
         "configuration_sha256": _hash_file(repository / "aegis.yaml"),
         "tests_sha256": _hash_text(json.dumps(antibody.tests, sort_keys=True)),
@@ -158,6 +150,10 @@ def _current_inputs(repository: Path, antibody: Antibody, target: Target) -> dic
         "schema_sha256": _hash_text("antibody-v1|proof-v1"),
         "execution_sha256": _hash_text(json.dumps(_execution_input(target), sort_keys=True)),
     }
+    jira_digest = linked_content_hash(repository, antibody.id)
+    if jira_digest is not None:
+        inputs["jira_content_sha256"] = jira_digest
+    return inputs
 
 
 def _execution_input(target: Target) -> dict[str, object]:
