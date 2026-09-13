@@ -12,6 +12,7 @@ from .config import ConfigurationError, load_target
 from .doctor import DoctorError, diagnose
 from .proof import ProofError, freshness as proof_freshness, prove
 from .approval import ApprovalError, approve
+from .guard import guard
 
 DEFAULT_CONFIG = {"schema_version": 1, "targets": [{"name": "default", "runner": "command-junit", "command": ["python", "-m", "pytest", "--junitxml=reports/junit.xml"], "junit_xml": "reports/junit.xml"}]}
 
@@ -49,6 +50,9 @@ def main(argv: list[str] | None = None) -> int:
     approval.add_argument("--directory", default=".")
     approval.add_argument("--github-fixture", required=True)
     approval.add_argument("--required-owner", action="append", required=True)
+    guard_parser = commands.add_parser("guard", help="run deterministic approved PR guards")
+    guard_parser.add_argument("--directory", default=".")
+    guard_parser.add_argument("--changed", action="append", required=True)
     args = parser.parse_args(argv)
     if args.command == "init":
         destination = Path(args.directory) / "aegis.yaml"
@@ -59,6 +63,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Created {destination}")
         return 0
     repository = Path(args.directory).resolve()
+    if args.command == "guard":
+        result = guard(repository, args.changed)
+        print(f"Aegis guard: {result}")
+        return 0 if result == "pass" else 1
     if args.command == "approve":
         try:
             record = approve(repository, args.id, Path(args.github_fixture).resolve(), args.required_owner)

@@ -1,0 +1,16 @@
+name: Aegis Replay Guard
+description: Run deterministic approved Aegis regression guards for a pull request.
+inputs:
+  changed-paths:
+    description: Newline-delimited changed repository paths.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: python -m pip install .
+    - shell: bash
+      run: |
+        args=()
+        while IFS= read -r path; do args+=(--changed "$path"); done <<< "${{ inputs.changed-paths }}"
+        aegis guard "${args[@]}"
