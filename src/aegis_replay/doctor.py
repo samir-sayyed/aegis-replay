@@ -16,15 +16,16 @@ class DoctorError(RuntimeError):
 
 
 def diagnose(target: Target, repository: Path) -> Path:
+    working_directory = repository / target.directory
     executable = target.command[0]
     if "/" in executable:
-        command_path = Path(executable) if Path(executable).is_absolute() else repository / executable
+        command_path = Path(executable) if Path(executable).is_absolute() else working_directory / executable
         if not command_path.is_file() or not os.access(command_path, os.X_OK):
             raise DoctorError(f"command is missing or not executable: {executable}")
     elif shutil.which(executable) is None:
         raise DoctorError(f"command is missing: {executable}")
-    _run(target, repository)
-    result_paths = list(repository.glob(target.junit_xml))
+    _run(target, working_directory)
+    result_paths = list(working_directory.glob(target.junit_xml))
     if len(result_paths) != 1:
         raise DoctorError(f"expected exactly one JUnit result, found {len(result_paths)}")
     _verify_junit(result_paths[0])

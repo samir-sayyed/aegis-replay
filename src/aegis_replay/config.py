@@ -24,6 +24,7 @@ class Target:
     command: tuple[str, ...]
     junit_xml: str
     environment: dict[str, str]
+    directory: str
 
 
 def load_target(config_path: Path, target_name: str | None) -> Target:
@@ -49,6 +50,7 @@ def _parse_target(raw: dict[str, Any]) -> Target:
     command = raw.get("command")
     junit_xml = raw.get("junit_xml")
     environment = raw.get("environment", {})
+    directory = raw.get("directory", ".")
     if not isinstance(name, str) or not name:
         raise ConfigurationError("target name must be non-empty")
     if not isinstance(command, list) or not command or not all(isinstance(value, str) and value for value in command):
@@ -59,11 +61,13 @@ def _parse_target(raw: dict[str, Any]) -> Target:
         raise ConfigurationError("command path must not traverse outside repository")
     if not isinstance(junit_xml, str) or not _is_safe_relative_path(junit_xml):
         raise ConfigurationError("junit_xml must be a safe relative path")
+    if not isinstance(directory, str) or not _is_safe_relative_path(directory):
+        raise ConfigurationError("directory must be a safe relative path")
     if not isinstance(environment, dict) or any(
         key not in ALLOWED_ENVIRONMENT or not isinstance(value, str) for key, value in environment.items()
     ):
         raise ConfigurationError("environment contains disallowed values")
-    return Target(name, tuple(command), junit_xml, environment)
+    return Target(name, tuple(command), junit_xml, environment, directory)
 
 
 def _is_safe_relative_path(value: str) -> bool:
