@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from aegis_replay.jira import capture, detect_key, linked_content_hash
+from aegis_replay.jira import capture, detect_key, fetch, linked_content_hash
 
 
 def test_capture_keeps_only_sanitized_allowed_jira_fields(tmp_path: Path) -> None:
@@ -28,3 +28,18 @@ def test_capture_links_sanitized_ticket_content_to_an_antibody(tmp_path: Path) -
     changed = {"key": "APP-42", "fields": {"summary": "Restore sound", "acceptance_criteria": "Audio and DND return"}}
     capture(tmp_path, changed, "APP-42", antibody_id="sound-restore")
     assert linked_content_hash(tmp_path, "sound-restore") != first
+
+
+def test_fetch_requests_only_allowlisted_jira_fields_and_maps_agreed_acceptance_field() -> None:
+    calls = []
+
+    def request(endpoint, headers, timeout):
+        calls.append((endpoint, headers, timeout))
+        return {"key": "APP-42", "fields": {"summary": "Restore", "customfield_10001": "Audio returns"}}
+
+    payload = fetch("https://acme.atlassian.net", "APP-42", "person@example.com", "secret", "customfield_10001", request=request)
+    endpoint, headers, timeout = calls[0]
+    assert "comment" not in endpoint and "attachment" not in endpoint
+    assert "fields=summary%2Cdescription%2Cissuetype%2Clabels%2Ccomponents%2Cparent%2Ccustomfield_10001" in endpoint
+    assert headers["Authorization"].startswith("Basic ") and timeout == 10
+    assert payload["fields"]["acceptance_criteria"] == "Audio returns"

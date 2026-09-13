@@ -5,7 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from base64 import b64encode
 from pathlib import Path
+from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
 
 
 class JiraError(ValueError):
@@ -16,6 +19,7 @@ KEY = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
 ANTIBODY_ID = re.compile(r"^[a-z][a-z0-9-]{1,62}$")
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
 SENSITIVE = re.compile(r"(?:gh[pousr]_[A-Za-z0-9]+|sk-[A-Za-z0-9]+|bearer\s+\S+|(?:password|token)\s*=\s*\S+)", re.I)
+ALLOWED_FIELDS = ("summary", "description", "issuetype", "labels", "components", "parent")
 
 
 def detect_key(*texts: str, override: str | None = None) -> str:
@@ -27,6 +31,28 @@ def detect_key(*texts: str, override: str | None = None) -> str:
     if not found:
         raise JiraError("no Jira key found")
     return found[0]
+
+
+def fetch(base_url: str, key: str, email: str, api_token: str, acceptance_field: str | None = None, request: object | None = None) -> dict:
+    if not base_url.startswith("https://") or not KEY.fullmatch(key) or not email or not api_token:
+        raise JiraError("Jira URL, key, email, and API token are required")
+    if acceptance_field is not None and not re.fullmatch(r"(?:customfield_\d+|[A-Za-z][A-Za-z0-9_]*)", acceptance_field):
+        raise JiraError("Jira acceptance field is malformed")
+    fields = ALLOWED_FIELDS + ((acceptance_field,) if acceptance_field else ())
+    endpoint = base_url.rstrip("/") + "/rest/api/3/issue/" + quote(key) + "?" + urlencode({"fields": ",".join(fields)})
+    authorization = b64encode(f"{email}:{api_token}".encode()).decode()
+    get = _get_json if request is None else request
+    try:
+        payload = get(endpoint, {"Authorization": f"Basic {authorization}", "Accept": "application/json"}, 10)
+        fields_payload = payload["fields"]
+    except (JiraError, KeyError, TypeError) as error:
+        raise JiraError("Jira response is malformed") from error
+    if not isinstance(payload, dict) or payload.get("key") != key or not isinstance(fields_payload, dict):
+        raise JiraError("Jira response is malformed")
+    normalized = {"key": key, "fields": dict(fields_payload)}
+    if acceptance_field:
+        normalized["fields"]["acceptance_criteria"] = normalized["fields"].get(acceptance_field, "")
+    return normalized
 
 
 def capture(repository: Path, payload: dict, key: str, antibody_id: str | None = None) -> Path:
@@ -90,3 +116,11 @@ def _names(value: object) -> list[str]:
 def _snapshot_hash(snapshot: dict) -> str:
     content = {key: value for key, value in snapshot.items() if key != "content_sha256"}
     return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
+
+
+def _get_json(endpoint: str, headers: dict[str, str], timeout: int) -> dict:
+    with urlopen(Request(endpoint, headers=headers, method="GET"), timeout=timeout) as response:  # noqa: S310 - HTTPS enforced by fetch
+        payload = json.loads(response.read().decode())
+    if not isinstance(payload, dict):
+        raise JiraError("Jira response is malformed")
+    return payload
