@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import yaml
@@ -13,6 +14,7 @@ from .doctor import DoctorError, diagnose
 from .proof import ProofError, freshness as proof_freshness, prove
 from .approval import ApprovalError, approve
 from .guard import guard
+from .selection import SelectionError, rank_repository
 
 DEFAULT_CONFIG = {"schema_version": 1, "targets": [{"name": "default", "runner": "command-junit", "command": ["python", "-m", "pytest", "--junitxml=reports/junit.xml"], "junit_xml": "reports/junit.xml"}]}
 
@@ -58,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     guard_group = guard_parser.add_mutually_exclusive_group(required=True)
     guard_group.add_argument("--changed", action="append")
     guard_group.add_argument("--all", action="store_true")
+    select_parser = commands.add_parser("select", help="rank deterministic and lexical antibody candidates")
+    select_parser.add_argument("--directory", default=".")
+    select_parser.add_argument("--changed", action="append", required=True)
     args = parser.parse_args(argv)
     if args.command == "init":
         destination = Path(args.directory) / "aegis.yaml"
@@ -68,6 +73,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Created {destination}")
         return 0
     repository = Path(args.directory).resolve()
+    if args.command == "select":
+        try:
+            rankings = rank_repository(repository, args.changed)
+        except SelectionError as error:
+            print(f"Aegis select: {error}")
+            return 1
+        print(json.dumps([{"id": item.id, "score": item.score, "reason": item.reason} for item in rankings], sort_keys=True))
+        return 0
     if args.command == "guard":
         result = guard(repository, ["*"] if args.all else args.changed)
         print(f"Aegis guard: {result}")
