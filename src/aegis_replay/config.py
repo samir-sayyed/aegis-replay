@@ -14,6 +14,7 @@ class ConfigurationError(ValueError):
 
 
 SHELL_TOKENS = (";", "|", "&", ">", "<", "`", "$", "\n", "\r")
+SUPPORTED_RUNNERS = frozenset({"command-junit", "gradle-junit", "pytest-junit", "jest-junit", "xcode-junit"})
 ALLOWED_ENVIRONMENT = frozenset({"CI", "LANG", "LC_ALL", "TZ"})
 
 
@@ -42,8 +43,8 @@ def load_target(config_path: Path, target_name: str | None) -> Target:
 
 
 def _parse_target(raw: dict[str, Any]) -> Target:
-    if raw.get("runner") != "command-junit":
-        raise ConfigurationError("runner must be command-junit")
+    if raw.get("runner") not in SUPPORTED_RUNNERS:
+        raise ConfigurationError("runner must be a supported JUnit preset")
     name = raw.get("name")
     command = raw.get("command")
     junit_xml = raw.get("junit_xml")
