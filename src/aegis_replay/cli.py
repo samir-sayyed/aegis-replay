@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from .proof import ProofError, freshness as proof_freshness, prove
 from .approval import ApprovalError, approve
 from .guard import guard
 from .selection import SelectionError, rank_repository
+from .manifest import write as write_manifest
 
 DEFAULT_CONFIG = {"schema_version": 1, "targets": [{"name": "default", "runner": "command-junit", "command": ["python", "-m", "pytest", "--junitxml=reports/junit.xml"], "junit_xml": "reports/junit.xml"}]}
 
@@ -63,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     select_parser = commands.add_parser("select", help="rank deterministic and lexical antibody candidates")
     select_parser.add_argument("--directory", default=".")
     select_parser.add_argument("--changed", action="append", required=True)
+    select_parser.add_argument("--manifest", action="store_true", help="write sanitized immutable selection manifest")
     args = parser.parse_args(argv)
     if args.command == "init":
         destination = Path(args.directory) / "aegis.yaml"
@@ -79,7 +82,24 @@ def main(argv: list[str] | None = None) -> int:
         except SelectionError as error:
             print(f"Aegis select: {error}")
             return 1
-        print(json.dumps([{"id": item.id, "score": item.score, "reason": item.reason} for item in rankings], sort_keys=True))
+        result = {"rankings": [{"id": item.id, "score": item.score, "reason": item.reason} for item in rankings]}
+        if args.manifest:
+            inputs = {
+                "changed_paths_sha256": _hash_text(json.dumps(sorted(args.changed))),
+                "configuration_sha256": _hash_file(repository / "aegis.yaml"),
+                "registry_sha256": _hash_registry(repository),
+            }
+            record = write_manifest(
+                repository,
+                inputs,
+                result["rankings"],
+                [item.id for item in rankings],
+                "none",
+                "none",
+                "bm25-v1",
+            )
+            result["manifest"] = str(record.relative_to(repository))
+        print(json.dumps(result, sort_keys=True))
         return 0
     if args.command == "guard":
         result = guard(repository, ["*"] if args.all else args.changed)
@@ -129,3 +149,16 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(f"Aegis doctor: verified {args.target} ({result.relative_to(repository)})")
     return 0
+
+
+def _hash_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _hash_text(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _hash_registry(repository: Path) -> str:
+    records = sorted((repository / ".aegis" / "antibodies").glob("*.json"))
+    return _hash_text("".join(f"{path.name}:{_hash_file(path)}\n" for path in records))
