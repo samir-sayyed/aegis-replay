@@ -83,3 +83,11 @@ def test_proof_uses_declared_proof_command_for_target_and_control(tmp_path: Path
     git(tmp_path, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "base")
     target = Target("unit", ("false",), "result.xml", {}, ".", (), (sys.executable, "runner.py"))
     _run_state(tmp_path, target, "fixed", None, [("x", "target"), ("x", "control")], True)
+
+
+def test_bad_proof_state_allows_passing_control_beside_failed_target(tmp_path: Path) -> None:
+    (tmp_path / "runner.py").write_text("from pathlib import Path\nPath('result.xml').write_text('<testsuite><testcase classname=\"x\" name=\"target\"><failure/></testcase><testcase classname=\"x\" name=\"control\"/></testsuite>')\nraise SystemExit(1)\n")
+    git(tmp_path, "init")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "base")
+    _run_state(tmp_path, Target("unit", (sys.executable, "runner.py"), "result.xml", {}, ".", ()), "known", None, [("x", "target")], False)

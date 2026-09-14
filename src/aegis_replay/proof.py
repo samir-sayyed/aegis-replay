@@ -93,7 +93,7 @@ def _run_state(repository: Path, target: Target, name: str, patch: Path | None, 
                 raise ProofError(f"{name}: expected exactly one JUnit XML result, found {len(outputs)}")
             output = outputs[0]
             actual = _junit_outcomes(output)
-            if set(actual) != set(expected) or any(actual[item] != passing for item in expected):
+            if not set(expected).issubset(actual) or (passing and set(actual) != set(expected)) or any(actual[item] != passing for item in expected):
                 raise ProofError(f"{name}: JUnit outcomes do not match exact expected tests")
             if passing and result.returncode != 0:
                 raise ProofError(f"{name}: passing JUnit run returned {result.returncode}")
