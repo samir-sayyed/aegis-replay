@@ -91,3 +91,16 @@ def test_bad_proof_state_allows_passing_control_beside_failed_target(tmp_path: P
     git(tmp_path, "add", ".")
     git(tmp_path, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "base")
     _run_state(tmp_path, Target("unit", (sys.executable, "runner.py"), "result.xml", {}, ".", ()), "known", None, [("x", "target")], False)
+
+
+def test_scope_hash_ignores_unrelated_proof_artifact_commit(tmp_path: Path) -> None:
+    from aegis_replay.proof import _scope_hash
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "protected.py").write_text("fixed")
+    first = _scope_hash(tmp_path, ["src"])
+    (tmp_path / ".aegis" / "proofs").mkdir(parents=True)
+    (tmp_path / ".aegis" / "proofs" / "record.json").write_text("artifact")
+    assert _scope_hash(tmp_path, ["src"]) == first
+    (tmp_path / "src" / "protected.py").write_text("changed")
+    assert _scope_hash(tmp_path, ["src"]) != first

@@ -40,7 +40,7 @@ def prove(repository: Path, antibody: Antibody, known_bad: Path, alternate_bad: 
         "schema_version": 1,
         "antibody_id": antibody.id,
         "state": "proved",
-        "source_revision": _git(repository, "rev-parse", "HEAD").strip(),
+        "source_revision": _scope_hash(repository, antibody.scope),
         "inputs": _current_inputs(repository, antibody, target),
         "states": {"known_bad": "target-failed", "fixed": "target-and-control-passed", "alternate_bad": "target-failed"},
     }
@@ -56,13 +56,13 @@ def freshness(repository: Path, antibody_id: str) -> str:
         return "unproved"
     try:
         proof = json.loads(path.read_text(encoding="utf-8"))
-        current = _git(repository, "rev-parse", "HEAD").strip()
-    except (json.JSONDecodeError, ProofError):
+        antibody = load(repository, antibody_id)
+        current = _scope_hash(repository, antibody.scope)
+    except (AntibodyError, OSError, json.JSONDecodeError, ProofError):
         return "stale"
     if proof.get("source_revision") != current:
         return "stale"
     try:
-        antibody = load(repository, antibody_id)
         target = load_target(repository / "aegis.yaml", antibody.target)
         expected = _current_inputs(repository, antibody, target)
     except (AntibodyError, JiraError, OSError, ProofError):
@@ -155,7 +155,7 @@ def _hash_text(value: str) -> str:
 def _current_inputs(repository: Path, antibody: Antibody, target: Target) -> dict[str, str]:
     inputs_directory = repository / ".aegis" / "proof-inputs" / antibody.id
     inputs = {
-        "source_sha256": _hash_text(_git(repository, "rev-parse", "HEAD").strip()),
+        "source_sha256": _scope_hash(repository, antibody.scope),
         "configuration_sha256": _hash_file(repository / "aegis.yaml"),
         "tests_sha256": _hash_text(json.dumps(antibody.tests, sort_keys=True)),
         "known_bad_mutation_sha256": _hash_file(inputs_directory / "known-bad.patch"),
@@ -172,3 +172,15 @@ def _current_inputs(repository: Path, antibody: Antibody, target: Target) -> dic
 
 def _execution_input(target: Target) -> dict[str, object]:
     return {"command": target.command, "proof_command": target.proof_command or target.command, "directory": target.directory, "environment": target.environment, "junit_xml": target.junit_xml}
+
+
+def _scope_hash(repository: Path, scope: list[str]) -> str:
+    digest = hashlib.sha256()
+    for item in sorted(scope):
+        path = repository / item
+        files = sorted(path.rglob("*")) if path.is_dir() else [path]
+        for file in files:
+            if file.is_file():
+                digest.update(str(file.relative_to(repository)).encode())
+                digest.update(file.read_bytes())
+    return digest.hexdigest()

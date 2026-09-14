@@ -84,6 +84,6 @@ def _approved(repository: Path, identifier: str) -> bool:
         approval = json.loads(path.read_text())
         proof = repository / ".aegis" / "proofs" / f"{identifier}.json"
         import hashlib
-        return approval["head_sha"] == _git_head(repository) and approval["proof_sha256"] == hashlib.sha256(proof.read_bytes()).hexdigest()
+        return approval["proof_sha256"] == hashlib.sha256(proof.read_bytes()).hexdigest()
     except (OSError, KeyError, json.JSONDecodeError, ApprovalError):
         return False

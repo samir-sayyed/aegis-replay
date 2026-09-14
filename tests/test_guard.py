@@ -8,7 +8,7 @@ from pathlib import Path
 
 from aegis_replay.antibodies import load
 from aegis_replay.config import load_target
-from aegis_replay.proof import _current_inputs
+from aegis_replay.proof import _current_inputs, _scope_hash
 from aegis_replay.guard import _symbol_matches
 
 
@@ -39,7 +39,7 @@ def setup_guard(directory: Path) -> None:
     proof.parent.mkdir(exist_ok=True)
     antibody = load(directory, "guard-demo")
     target = load_target(directory / "aegis.yaml", antibody.target)
-    proof.write_text(json.dumps({"source_revision": head, "inputs": _current_inputs(directory, antibody, target)}))
+    proof.write_text(json.dumps({"source_revision": _scope_hash(directory, antibody.scope), "inputs": _current_inputs(directory, antibody, target)}))
     digest = hashlib.sha256(proof.read_bytes()).hexdigest()
     approval = directory / ".aegis" / "approvals" / "guard-demo.json"
     approval.parent.mkdir(exist_ok=True)
