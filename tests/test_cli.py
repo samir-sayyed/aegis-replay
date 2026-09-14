@@ -41,6 +41,14 @@ def test_semantic_selection_without_provider_falls_back_instead_of_failing(tmp_p
     assert json.loads(result.stdout)["semantic"]["fallback"] is True
 
 
+def test_recorded_semantic_response_must_stay_inside_repository(tmp_path: Path) -> None:
+    fixture = tmp_path.parent / "semantic.json"
+    fixture.write_text('{"selected":[],"uncertain":false}')
+    result = invoke("select", "--directory", str(tmp_path), "--changed", "src/a.py", "--semantic", "--commit", "a1b2c3d", "--semantic-response-file", str(fixture))
+    assert result.returncode == 2
+    assert "must stay inside" in result.stderr
+
+
 def test_doctor_executes_one_passing_test_and_verifies_junit(tmp_path: Path) -> None:
     (tmp_path / "make_junit.py").write_text("from pathlib import Path\nPath('result.xml').write_text('<testsuite><testcase classname=\"fixture\" name=\"passes\"/></testsuite>')\n")
     (tmp_path / "aegis.yaml").write_text("schema_version: 1\ntargets:\n  - name: fixture\n    runner: command-junit\n    command: ['" + sys.executable + "', 'make_junit.py']\n    junit_xml: result.xml\n")

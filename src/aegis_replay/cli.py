@@ -71,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     select_parser.add_argument("--changed", action="append", required=True)
     select_parser.add_argument("--manifest", action="store_true", help="write sanitized immutable selection manifest")
     select_parser.add_argument("--semantic", action="store_true", help="add fail-safe LiteLLM semantic selection")
+    select_parser.add_argument("--semantic-response-file", help="recorded strict JSON semantic response inside repository")
     select_parser.add_argument("--commit", help="immutable commit SHA required by --semantic")
     select_parser.add_argument("--symbol", action="append", default=[], help="changed symbol name; repeatable")
     select_parser.add_argument("--diff-file", help="minimal diff hunks; never stored")
@@ -122,6 +123,13 @@ def main(argv: list[str] | None = None) -> int:
             if args.semantic:
                 if not args.commit:
                     parser.error("--commit is required with --semantic")
+                if args.semantic_response_file:
+                    response_file = Path(args.semantic_response_file).resolve()
+                    if repository not in response_file.parents:
+                        parser.error("--semantic-response-file must stay inside --directory")
+                    recorded_response = response_file.read_text(encoding="utf-8")
+                else:
+                    recorded_response = None
                 prompt = semantic_prompt(
                     repository,
                     args.changed,
@@ -132,6 +140,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
 
                 def transport(payload: dict) -> str:
+                    if recorded_response is not None:
+                        return recorded_response
                     return litellm_transport(
                         os.environ.get("LITELLM_BASE_URL", ""),
                         os.environ.get("LITELLM_MODEL", ""),
