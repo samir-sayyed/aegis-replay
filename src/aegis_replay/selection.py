@@ -49,7 +49,14 @@ def semantic_prompt(repository: Path, changed_paths: list[str], symbols: list[st
             digest = linked_content_hash(repository, antibody.id)
         except (AntibodyError, JiraError, OSError, json.JSONDecodeError) as error:
             raise SelectionError(f"cannot load antibody candidate: {path.stem}") from error
-        antibodies.append({"id": antibody.id, "invariant": antibody.invariant, "target": antibody.target, "scope": antibody.scope, "jira_content_sha256": digest or ""})
+        antibodies.append({
+            "id": antibody.id,
+            "invariant": antibody.invariant,
+            "target": antibody.target,
+            "scope": antibody.scope,
+            "jira_content_sha256": digest or "",
+            "jira_intent": _intent(repository, antibody.id) if digest else "",
+        })
     return {
         "commit": commit,
         "model": model,
