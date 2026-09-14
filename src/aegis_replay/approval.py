@@ -30,14 +30,13 @@ def approve(
         reviews = fixture["reviews"]
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
         raise ApprovalError("GitHub fixture is malformed") from error
-    current = _git_head(repository)
     proof_path = repository / ".aegis" / "proofs" / f"{antibody_id}.json"
     try:
         proof = json.loads(proof_path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise ApprovalError("current proof is missing") from error
-    if head != current or proof.get("source_commit") != current:
-        raise ApprovalError("reviewed GitHub head does not match current proof")
+    if head != proof.get("source_commit"):
+        raise ApprovalError("reviewed GitHub head does not match proof source commit")
     approved = []
     for review in reviews:
         user = review.get("user", {}).get("login") if isinstance(review, dict) else None

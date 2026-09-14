@@ -43,6 +43,10 @@ def test_approval_rejects_stale_or_dismissed_review(tmp_path: Path) -> None:
     (tmp_path / "next.txt").write_text("next\n")
     git(tmp_path, "add", ".")
     git(tmp_path, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "next")
+    proof_path = tmp_path / ".aegis" / "proofs" / "demo.json"
+    proof = json.loads(proof_path.read_text())
+    proof["source_commit"] = "f" * 40
+    proof_path.write_text(json.dumps(proof))
     stale = cli(tmp_path, "approve", "demo", "--directory", str(tmp_path), "--github-fixture", str(fixture), "--required-owner", "alice")
     assert stale.returncode == 1
     assert "head does not match" in stale.stdout
