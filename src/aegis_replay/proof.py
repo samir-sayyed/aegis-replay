@@ -129,8 +129,12 @@ def _require_scoped_patch(path: Path, scope: list[str]) -> None:
     if not path.is_file():
         raise ProofError(f"mutation is missing: {path}")
     changed = [line[6:] for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("+++ b/")]
-    if not changed or any(item not in scope for item in changed):
+    if not changed or any(not _in_scope(item, scope) for item in changed):
         raise ProofError("mutation changes files outside antibody scope")
+
+
+def _in_scope(path: str, scope: list[str]) -> bool:
+    return any(path == item or path.startswith(item.rstrip("/") + "/") for item in scope)
 
 
 def _git(repository: Path, *arguments: str) -> str:

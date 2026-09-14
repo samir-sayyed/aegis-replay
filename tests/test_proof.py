@@ -6,7 +6,7 @@ from pathlib import Path
 
 from aegis_replay.config import Target
 from aegis_replay.jira import capture
-from aegis_replay.proof import _run_state
+from aegis_replay.proof import _in_scope, _run_state
 
 
 def run(directory: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -69,3 +69,8 @@ def test_proof_runs_target_in_declared_directory_and_resolves_junit_glob(tmp_pat
     git(tmp_path, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "base")
     target = Target("nested", (sys.executable, "runner.py"), "reports/*.xml", {}, "project", ())
     _run_state(tmp_path, target, "fixed", None, [("fixture", "target"), ("fixture", "control")], True)
+
+
+def test_proof_scope_allows_file_under_declared_directory_only() -> None:
+    assert _in_scope("python-pytest/src/poc/greeting.py", ["python-pytest/src"])
+    assert not _in_scope("typescript-jest/src/filter.ts", ["python-pytest/src"])
