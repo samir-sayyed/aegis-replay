@@ -7,6 +7,7 @@ permissions:
   pull-requests: read
 jobs:
   guard:
+    if: ${{ !github.event.pull_request.head.repo.fork }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,3 +35,14 @@ jobs:
           path: .aegis/manifests/*.json
           if-no-files-found: ignore
           retention-days: 90
+  fork-guard:
+    if: ${{ github.event.pull_request.head.repo.fork }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: ./
+        with:
+          changed-paths: '*'
