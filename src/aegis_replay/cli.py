@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import yaml
@@ -15,6 +16,7 @@ from .doctor import DoctorError, diagnose
 from .proof import ProofError, freshness as proof_freshness, prove
 from .approval import ApprovalError, approve
 from .guard import guard
+from .jira import JiraError, capture as capture_jira, detect_key, fetch as fetch_jira
 from .selection import SelectionError, rank_repository
 from .manifest import write as write_manifest
 
@@ -66,6 +68,19 @@ def main(argv: list[str] | None = None) -> int:
     select_parser.add_argument("--directory", default=".")
     select_parser.add_argument("--changed", action="append", required=True)
     select_parser.add_argument("--manifest", action="store_true", help="write sanitized immutable selection manifest")
+    jira = commands.add_parser("jira", help="capture a sanitized Jira intent snapshot")
+    jira_commands = jira.add_subparsers(dest="jira_command", required=True)
+    jira_capture = jira_commands.add_parser("capture", help="store agreed Jira fields and optionally link an antibody")
+    jira_capture.add_argument("--directory", default=".")
+    jira_capture.add_argument("--antibody")
+    jira_capture.add_argument("--key", help="explicit Jira key; overrides branch and PR text")
+    jira_capture.add_argument("--branch", default="")
+    jira_capture.add_argument("--pr-title", default="")
+    jira_capture.add_argument("--pr-description", default="")
+    jira_source = jira_capture.add_mutually_exclusive_group(required=True)
+    jira_source.add_argument("--jira-fixture", help="recorded Jira API response for local or CI testing")
+    jira_source.add_argument("--jira-url", help="HTTPS Jira Cloud base URL; reads JIRA_EMAIL and JIRA_API_TOKEN")
+    jira_capture.add_argument("--acceptance-field", help="Jira custom field containing acceptance criteria")
     args = parser.parse_args(argv)
     if args.command == "init":
         destination = Path(args.directory) / "aegis.yaml"
@@ -76,6 +91,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Created {destination}")
         return 0
     repository = Path(args.directory).resolve()
+    if args.command == "jira":
+        try:
+            key = detect_key(args.branch, args.pr_title, args.pr_description, override=args.key)
+            if args.jira_fixture:
+                payload = json.loads(Path(args.jira_fixture).read_text(encoding="utf-8"))
+            else:
+                payload = fetch_jira(
+                    args.jira_url,
+                    key,
+                    os.environ.get("JIRA_EMAIL", ""),
+                    os.environ.get("JIRA_API_TOKEN", ""),
+                    args.acceptance_field,
+                )
+            record = capture_jira(repository, payload, key, args.antibody)
+            print(f"Aegis Jira: captured {record.relative_to(repository)}")
+        except (JiraError, OSError, json.JSONDecodeError) as error:
+            print(f"Aegis Jira: {error}")
+            return 1
+        return 0
     if args.command == "select":
         try:
             rankings = rank_repository(repository, args.changed)

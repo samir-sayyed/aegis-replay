@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import json
 from pathlib import Path
 
 
@@ -19,6 +20,19 @@ def test_init_creates_versioned_generic_target(tmp_path: Path) -> None:
     content = (tmp_path / "aegis.yaml").read_text()
     assert "schema_version: 1" in content
     assert "runner: command-junit" in content
+
+
+def test_jira_capture_detects_branch_key_and_stores_sanitized_snapshot(tmp_path: Path) -> None:
+    fixture = tmp_path / "jira.json"
+    fixture.write_text(json.dumps({"key": "APP-42", "fields": {"summary": "Restore", "description": "token=secret"}}))
+    result = invoke(
+        "jira", "capture", "--directory", str(tmp_path), "--branch", "fix/APP-42-restore",
+        "--jira-fixture", str(fixture), "--antibody", "sound-restore",
+    )
+    assert result.returncode == 0, result.stdout
+    snapshot = json.loads((tmp_path / ".aegis" / "jira" / "APP-42.json").read_text())
+    assert snapshot["description"] == "[redacted]"
+    assert (tmp_path / ".aegis" / "jira-links" / "sound-restore.json").is_file()
 
 
 def test_doctor_executes_one_passing_test_and_verifies_junit(tmp_path: Path) -> None:
