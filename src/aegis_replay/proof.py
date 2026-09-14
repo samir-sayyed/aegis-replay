@@ -51,7 +51,7 @@ def prove(repository: Path, antibody: Antibody, known_bad: Path, alternate_bad: 
     return destination
 
 
-def freshness(repository: Path, antibody_id: str) -> str:
+def freshness(repository: Path, antibody_id: str, allow_source_change: bool = False) -> str:
     path = repository / ".aegis" / "proofs" / f"{antibody_id}.json"
     if not path.is_file():
         return "unproved"
@@ -61,14 +61,18 @@ def freshness(repository: Path, antibody_id: str) -> str:
         current = _scope_hash(repository, antibody.scope)
     except (AntibodyError, OSError, json.JSONDecodeError, ProofError):
         return "stale"
-    if proof.get("source_revision") != current:
+    if not allow_source_change and proof.get("source_revision") != current:
         return "stale"
     try:
         target = load_target(repository / "aegis.yaml", antibody.target)
         expected = _current_inputs(repository, antibody, target)
     except (AntibodyError, JiraError, OSError, ProofError):
         return "stale"
-    return "fresh" if proof.get("inputs") == expected else "stale"
+    recorded_inputs = proof.get("inputs")
+    if allow_source_change and isinstance(recorded_inputs, dict):
+        recorded_inputs = {key: value for key, value in recorded_inputs.items() if key != "source_sha256"}
+        expected = {key: value for key, value in expected.items() if key != "source_sha256"}
+    return "fresh" if recorded_inputs == expected else "stale"
 
 
 def _run_state(repository: Path, target: Target, name: str, patch: Path | None, expected: list[tuple[str, str]], passing: bool) -> None:

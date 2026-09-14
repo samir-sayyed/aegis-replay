@@ -27,7 +27,7 @@ def guard(repository: Path, changed_paths: list[str], symbols: list[str] | None 
             target = load_target(repository / "aegis.yaml", antibody.target)
             if not select_all and not _matches(antibody.scope + list(target.scope), changed_paths) and not _symbol_matches(antibody.tests, symbols):
                 continue
-            if freshness(repository, identifier) != "fresh" or not _approved(repository, identifier):
+            if freshness(repository, identifier, allow_source_change=True) != "fresh" or not _approved(repository, identifier):
                 return "invalid"
             selected.append(antibody)
         except (AntibodyError, ConfigurationError, OSError, json.JSONDecodeError):

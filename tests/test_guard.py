@@ -21,6 +21,8 @@ def git(directory: Path, *arguments: str) -> str:
 
 
 def setup_guard(directory: Path) -> None:
+    (directory / "src").mkdir()
+    (directory / "src" / "guard.py").write_text("VALUE = 'fixed'\n")
     (directory / "run.py").write_text("from pathlib import Path\nPath('result.xml').write_text('<testsuite><testcase classname=\"x\" name=\"y\"/><testcase classname=\"x\" name=\"control\"/></testsuite>')\n")
     (directory / "aegis.yaml").write_text("schema_version: 1\ntargets:\n  - name: unit\n    runner: command-junit\n    command: ['" + sys.executable + "', 'run.py']\n    junit_xml: result.xml\n")
     git(directory, "init")
@@ -62,6 +64,14 @@ def test_guard_fails_closed_for_stale_matching_proof(tmp_path: Path) -> None:
     result = cli(tmp_path, "guard", "--directory", str(tmp_path), "--changed", "src/guard.py")
     assert result.returncode == 1
     assert "invalid" in result.stdout
+
+
+def test_guard_runs_selected_test_against_changed_protected_source(tmp_path: Path) -> None:
+    setup_guard(tmp_path)
+    (tmp_path / "src" / "guard.py").write_text("VALUE = 'changed on PR'\n")
+    result = cli(tmp_path, "guard", "--directory", str(tmp_path), "--changed", "src/guard.py")
+    assert result.returncode == 0
+    assert "pass" in result.stdout
 
 
 def test_guard_fails_closed_when_registry_record_is_deleted_or_dependency_changes(tmp_path: Path) -> None:
