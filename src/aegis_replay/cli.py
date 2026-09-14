@@ -65,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     guard_group = guard_parser.add_mutually_exclusive_group(required=True)
     guard_group.add_argument("--changed", action="append")
     guard_group.add_argument("--all", action="store_true")
+    guard_parser.add_argument("--symbol", action="append", default=[], help="changed symbol name; repeatable")
     select_parser = commands.add_parser("select", help="rank deterministic and lexical antibody candidates")
     select_parser.add_argument("--directory", default=".")
     select_parser.add_argument("--changed", action="append", required=True)
@@ -173,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, sort_keys=True))
         return 0
     if args.command == "guard":
-        result = guard(repository, ["*"] if args.all else args.changed)
+        result = guard(repository, ["*"] if args.all else args.changed, args.symbol)
         print(f"Aegis guard: {result}")
         return 0 if result == "pass" else 1
     if args.command == "approve":

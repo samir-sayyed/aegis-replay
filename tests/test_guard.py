@@ -9,6 +9,7 @@ from pathlib import Path
 from aegis_replay.antibodies import load
 from aegis_replay.config import load_target
 from aegis_replay.proof import _current_inputs
+from aegis_replay.guard import _symbol_matches
 
 
 def cli(directory: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -61,3 +62,18 @@ def test_guard_fails_closed_for_stale_matching_proof(tmp_path: Path) -> None:
     result = cli(tmp_path, "guard", "--directory", str(tmp_path), "--changed", "src/guard.py")
     assert result.returncode == 1
     assert "invalid" in result.stdout
+
+
+def test_guard_fails_closed_when_registry_record_is_deleted_or_dependency_changes(tmp_path: Path) -> None:
+    setup_guard(tmp_path)
+    deleted = cli(tmp_path, "guard", "--directory", str(tmp_path), "--changed", ".aegis/antibodies/guard-demo.json")
+    assert deleted.returncode == 1 and "invalid" in deleted.stdout
+    dependency = cli(tmp_path, "guard", "--directory", str(tmp_path), "--changed", "uv.lock")
+    assert dependency.returncode == 0 and "pass" in dependency.stdout
+
+
+def test_guard_matches_exact_protected_test_symbols_only() -> None:
+    tests = [{"class": "service.Audio", "name": "restores"}]
+    assert _symbol_matches(tests, ["service.Audio#restores"])
+    assert _symbol_matches(tests, ["restores"])
+    assert not _symbol_matches(tests, ["unrelated"])

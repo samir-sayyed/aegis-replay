@@ -9,23 +9,28 @@ from .antibodies import AntibodyError, load
 from .approval import ApprovalError, _git_head
 from .doctor import DoctorError, diagnose_identities
 from .proof import freshness
-from .config import load_target
+from .config import ConfigurationError, load_target
 from .batching import plan
 
 
-def guard(repository: Path, changed_paths: list[str]) -> str:
+def guard(repository: Path, changed_paths: list[str], symbols: list[str] | None = None) -> str:
+    symbols = symbols or []
+    if any(path.startswith(".aegis/") for path in changed_paths):
+        return "invalid"
+    select_all = "*" in changed_paths or any(_global_input(path) for path in changed_paths)
     candidates = sorted((repository / ".aegis" / "antibodies").glob("*.json"))
     selected = []
     for path in candidates:
         identifier = path.stem
         try:
             antibody = load(repository, identifier)
-            if "*" not in changed_paths and not _matches(antibody.scope, changed_paths):
+            target = load_target(repository / "aegis.yaml", antibody.target)
+            if not select_all and not _matches(antibody.scope + list(target.scope), changed_paths) and not _symbol_matches(antibody.tests, symbols):
                 continue
             if freshness(repository, identifier) != "fresh" or not _approved(repository, identifier):
                 return "invalid"
             selected.append(antibody)
-        except (AntibodyError, OSError, json.JSONDecodeError):
+        except (AntibodyError, ConfigurationError, OSError, json.JSONDecodeError):
             return "invalid"
     if not selected:
         return "pass"
@@ -40,7 +45,7 @@ def guard(repository: Path, changed_paths: list[str]) -> str:
     for items in batches.values():
         try:
             diagnose_identities(load_target(repository / "aegis.yaml", items[0]["target"]), repository, [item["test"] for item in items])
-        except DoctorError:
+        except (ConfigurationError, DoctorError):
             if not _run_isolated(repository, items):
                 return "recurrence"
     return "pass"
@@ -58,6 +63,19 @@ def _run_isolated(repository: Path, items: list[dict]) -> bool:
 
 def _matches(scope: list[str], changed: list[str]) -> bool:
     return any(item == path or item.startswith(path.rstrip("/") + "/") or path.startswith(item.rstrip("/") + "/") for item in scope for path in changed)
+
+
+def _symbol_matches(tests: list[dict[str, str]], symbols: list[str]) -> bool:
+    return any(symbol in {test["class"], test["name"], f"{test['class']}#{test['name']}"} for symbol in symbols for test in tests)
+
+
+def _global_input(path: str) -> bool:
+    name = Path(path).name
+    return name in {
+        "aegis.yaml", "requirements.txt", "uv.lock", "poetry.lock", "Pipfile.lock", "package.json", "package-lock.json",
+        "pnpm-lock.yaml", "yarn.lock", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts",
+        "gradle.properties", "Podfile.lock", "Package.swift", "Gemfile.lock",
+    } or path.endswith((".xml", ".xcresult"))
 
 
 def _approved(repository: Path, identifier: str) -> bool:
