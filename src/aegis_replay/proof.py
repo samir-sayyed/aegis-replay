@@ -41,6 +41,7 @@ def prove(repository: Path, antibody: Antibody, known_bad: Path, alternate_bad: 
         "antibody_id": antibody.id,
         "state": "proved",
         "source_revision": _scope_hash(repository, antibody.scope),
+        "source_commit": _git(repository, "rev-parse", "HEAD").strip(),
         "inputs": _current_inputs(repository, antibody, target),
         "states": {"known_bad": "target-failed", "fixed": "target-and-control-passed", "alternate_bad": "target-failed"},
     }

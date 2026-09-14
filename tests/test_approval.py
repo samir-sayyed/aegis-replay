@@ -24,7 +24,7 @@ def fixture_project(directory: Path, state: str = "APPROVED", dismissed: bool = 
     head = git(directory, "rev-parse", "HEAD")
     proof = directory / ".aegis" / "proofs" / "demo.json"
     proof.parent.mkdir(parents=True)
-    proof.write_text(json.dumps({"source_revision": head}))
+    proof.write_text(json.dumps({"source_revision": "scope-digest", "source_commit": head}))
     fixture = directory / "review.json"
     fixture.write_text(json.dumps({"pull_request": {"head": {"sha": head}}, "reviews": [{"user": {"login": "alice"}, "state": state, "dismissed_at": "2026-01-01" if dismissed else None, "commit_id": head}]}))
     return fixture

@@ -36,7 +36,7 @@ def approve(
         proof = json.loads(proof_path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise ApprovalError("current proof is missing") from error
-    if head != current or proof.get("source_revision") != current:
+    if head != current or proof.get("source_commit") != current:
         raise ApprovalError("reviewed GitHub head does not match current proof")
     approved = []
     for review in reviews:
