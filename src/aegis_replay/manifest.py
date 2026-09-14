@@ -10,10 +10,19 @@ from pathlib import Path
 FORBIDDEN = ("token", "password", "authorization", "diff", "description", "summary")
 
 
-def write(repository: Path, inputs: dict[str, str], rankings: list[dict], selected: list[str], fallback: str, model: str, prompt_version: str) -> Path:
+def write(
+    repository: Path,
+    inputs: dict[str, str],
+    rankings: list[dict],
+    selected: list[str],
+    fallback: str,
+    model: str,
+    prompt_version: str,
+    results: list[dict] | None = None,
+) -> Path:
     if any(any(word in key.lower() for word in FORBIDDEN) for key in inputs):
         raise ValueError("manifest inputs contain sensitive or raw content")
-    body = {"schema_version": 1, "input_hashes": dict(sorted(inputs.items())), "rankings": rankings, "selected": sorted(selected), "fallback": fallback, "model": model, "prompt_version": prompt_version}
+    body = {"schema_version": 1, "input_hashes": dict(sorted(inputs.items())), "rankings": rankings, "selected": sorted(selected), "fallback": fallback, "model": model, "prompt_version": prompt_version, "results": results or []}
     digest = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     destination = repository / ".aegis" / "manifests" / f"{digest}.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
