@@ -7,10 +7,10 @@ from pathlib import Path
 
 from .antibodies import AntibodyError, load
 from .approval import ApprovalError, _git_head
-from .doctor import DoctorError, diagnose_identities
+from .doctor import DoctorError, diagnose_identities, junit_identities
 from .proof import freshness
 from .config import ConfigurationError, load_target
-from .batching import plan
+from .batching import attribute, plan
 
 
 def guard(repository: Path, changed_paths: list[str], symbols: list[str] | None = None) -> str:
@@ -44,10 +44,14 @@ def guard(repository: Path, changed_paths: list[str], symbols: list[str] | None 
     )
     for items in batches.values():
         try:
-            diagnose_identities(load_target(repository / "aegis.yaml", items[0]["target"]), repository, [item["test"] for item in items])
+            result = diagnose_identities(load_target(repository / "aegis.yaml", items[0]["target"]), repository, [item["test"] for item in items])
+            requested = {item["test"] for item in items}
+            attribute(items, [identity for identity in junit_identities(result) if identity in requested])
         except (ConfigurationError, DoctorError):
             if not _run_isolated(repository, items):
                 return "recurrence"
+        except ValueError:
+            return "recurrence"
     return "pass"
 
 

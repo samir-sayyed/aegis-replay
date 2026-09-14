@@ -28,7 +28,13 @@ Retain CI-uploaded manifests for 90 days.
 
 ## Release maintainers
 
-Before first release, configure PyPI Trusted Publishing for this repository and
-release workflow. Build distribution with `python -m build`, inspect with
-`twine check dist/*`, then publish immutable `vX.Y.Z` release. Consumers pin
-package versions and action commits; never pin branches.
+Before first release, create `aegis-replay` project on PyPI, then add trusted
+publisher with owner `samir-sayyed`, repository `aegis-replay`, workflow
+`.github/workflows/release.yml`, and environment left blank. No PyPI API token
+is needed. Push an immutable `vX.Y.Z` tag only after GitHub Actions build and
+test workflows pass. Release workflow builds, checks, uploads distribution for
+90 days, and publishes with OIDC trusted publishing.
+
+Publish only after maintainer confirms PyPI project and trusted publisher
+configuration. Consumers install `pipx install aegis-replay==X.Y.Z` and pin
+action references to full commit SHAs; never pin branches.

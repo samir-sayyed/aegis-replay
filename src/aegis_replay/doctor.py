@@ -43,6 +43,23 @@ def diagnose_identities(target: Target, repository: Path, identities: list[tuple
     return result_paths[0]
 
 
+def junit_identities(result_path: Path) -> list[tuple[str, str]]:
+    """Return every executed passing JUnit testcase identity exactly once."""
+    try:
+        root = ET.parse(result_path).getroot()
+    except (OSError, ET.ParseError) as error:
+        raise DoctorError(f"invalid JUnit XML: {error}") from error
+    identities = []
+    for case in root.findall(".//testcase") if root.tag != "testcase" else [root]:
+        if case.find("failure") is not None or case.find("error") is not None or case.find("skipped") is not None:
+            continue
+        identity = (case.attrib.get("classname", ""), case.attrib.get("name", ""))
+        if not all(identity) or identity in identities:
+            raise DoctorError("JUnit result has an empty or duplicate testcase identity")
+        identities.append(identity)
+    return identities
+
+
 def _run(target: Target, repository: Path) -> None:
     environment = {"PATH": os.environ.get("PATH", "")}
     for name in ("JAVA_HOME", "JAVA_HOME_22_ARM64", "JAVA_HOME_22_X64"):

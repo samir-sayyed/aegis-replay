@@ -4,6 +4,7 @@ on:
     tags: ['v*']
 permissions:
   contents: read
+  id-token: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,3 +21,7 @@ jobs:
           name: aegis-replay-distribution
           path: dist/*
           retention-days: 90
+      - name: Publish to PyPI through trusted publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
