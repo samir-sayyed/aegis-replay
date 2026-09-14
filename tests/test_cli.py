@@ -35,6 +35,12 @@ def test_jira_capture_detects_branch_key_and_stores_sanitized_snapshot(tmp_path:
     assert (tmp_path / ".aegis" / "jira-links" / "sound-restore.json").is_file()
 
 
+def test_semantic_selection_without_provider_falls_back_instead_of_failing(tmp_path: Path) -> None:
+    result = invoke("select", "--directory", str(tmp_path), "--changed", "src/a.py", "--semantic", "--commit", "a1b2c3d")
+    assert result.returncode == 0, result.stdout
+    assert json.loads(result.stdout)["semantic"]["fallback"] is True
+
+
 def test_doctor_executes_one_passing_test_and_verifies_junit(tmp_path: Path) -> None:
     (tmp_path / "make_junit.py").write_text("from pathlib import Path\nPath('result.xml').write_text('<testsuite><testcase classname=\"fixture\" name=\"passes\"/></testsuite>')\n")
     (tmp_path / "aegis.yaml").write_text("schema_version: 1\ntargets:\n  - name: fixture\n    runner: command-junit\n    command: ['" + sys.executable + "', 'make_junit.py']\n    junit_xml: result.xml\n")

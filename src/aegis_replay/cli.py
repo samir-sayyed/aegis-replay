@@ -17,8 +17,9 @@ from .proof import ProofError, freshness as proof_freshness, prove
 from .approval import ApprovalError, approve
 from .guard import guard
 from .jira import JiraError, capture as capture_jira, detect_key, fetch as fetch_jira
-from .selection import SelectionError, rank_repository
+from .selection import SelectionError, rank_repository, semantic_prompt
 from .manifest import write as write_manifest
+from .semantic import litellm_transport, select as semantic_select
 
 DEFAULT_CONFIG = {"schema_version": 1, "targets": [{"name": "default", "runner": "command-junit", "command": ["python", "-m", "pytest", "--junitxml=reports/junit.xml"], "junit_xml": "reports/junit.xml"}]}
 
@@ -68,6 +69,10 @@ def main(argv: list[str] | None = None) -> int:
     select_parser.add_argument("--directory", default=".")
     select_parser.add_argument("--changed", action="append", required=True)
     select_parser.add_argument("--manifest", action="store_true", help="write sanitized immutable selection manifest")
+    select_parser.add_argument("--semantic", action="store_true", help="add fail-safe LiteLLM semantic selection")
+    select_parser.add_argument("--commit", help="immutable commit SHA required by --semantic")
+    select_parser.add_argument("--symbol", action="append", default=[], help="changed symbol name; repeatable")
+    select_parser.add_argument("--diff-file", help="minimal diff hunks; never stored")
     jira = commands.add_parser("jira", help="capture a sanitized Jira intent snapshot")
     jira_commands = jira.add_subparsers(dest="jira_command", required=True)
     jira_capture = jira_commands.add_parser("capture", help="store agreed Jira fields and optionally link an antibody")
@@ -112,11 +117,43 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "select":
         try:
-            rankings = rank_repository(repository, args.changed)
-        except SelectionError as error:
+            rankings = rank_repository(repository, args.changed, limit=not args.semantic)
+            if args.semantic:
+                if not args.commit:
+                    parser.error("--commit is required with --semantic")
+                prompt = semantic_prompt(
+                    repository,
+                    args.changed,
+                    args.symbol,
+                    Path(args.diff_file).read_text(encoding="utf-8") if args.diff_file else "",
+                    args.commit,
+                    os.environ.get("LITELLM_MODEL", "unconfigured"),
+                )
+
+                def transport(payload: dict) -> str:
+                    return litellm_transport(
+                        os.environ.get("LITELLM_BASE_URL", ""),
+                        os.environ.get("LITELLM_MODEL", ""),
+                        os.environ.get("LITELLM_API_KEY", ""),
+                    )(payload)
+
+                decision = semantic_select(
+                    [item.id for item in rankings],
+                    {item.id for item in rankings if item.reason == "deterministic match"},
+                    prompt,
+                    transport,
+                    repository / ".aegis" / "semantic-cache",
+                )
+                selected = set(decision.ids)
+                rankings = [item for item in rankings if item.id in selected]
+            else:
+                decision = None
+        except (SelectionError, OSError, ValueError) as error:
             print(f"Aegis select: {error}")
             return 1
         result = {"rankings": [{"id": item.id, "score": item.score, "reason": item.reason} for item in rankings]}
+        if decision:
+            result["semantic"] = {"fallback": decision.fallback, "reason": decision.reason, "cache_key": decision.cache_key}
         if args.manifest:
             inputs = {
                 "changed_paths_sha256": _hash_text(json.dumps(sorted(args.changed))),

@@ -17,7 +17,7 @@ class Ranked:
     reason: str
 
 
-def rank(query: str, records: list[dict], deterministic_ids: set[str]) -> list[Ranked]:
+def rank(query: str, records: list[dict], deterministic_ids: set[str], limit: bool = True) -> list[Ranked]:
     documents = {record["id"]: _words(" ".join([record.get("invariant", ""), record.get("jira", ""), " ".join(record.get("scope", []))])) for record in records}
     terms = _words(query)
     average = sum(len(value) for value in documents.values()) / max(len(documents), 1)
@@ -27,7 +27,7 @@ def rank(query: str, records: list[dict], deterministic_ids: set[str]) -> list[R
         reason = "deterministic match" if identifier in deterministic_ids else "BM25 lexical match"
         results.append(Ranked(identifier, round(score, 6), reason))
     results.sort(key=lambda item: (-item.score, item.id))
-    if len(results) > 50:
+    if limit and len(results) > 50:
         retained = {item.id for item in results[:20]} | deterministic_ids
         results = [item for item in results if item.id in retained]
     return results

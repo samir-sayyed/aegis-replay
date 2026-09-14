@@ -65,7 +65,8 @@ def _post_json(endpoint: str, headers: dict[str, str], body: dict, timeout: int)
 
 
 def select(candidates: list[str], deterministic: set[str], prompt: dict, transport: Callable[[dict], str], cache_directory: Path | None = None) -> Selection:
-    key = hashlib.sha256(json.dumps(prompt, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    cache_input = {"prompt": prompt, "candidates": sorted(candidates), "deterministic": sorted(deterministic)}
+    key = hashlib.sha256(json.dumps(cache_input, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     cache = cache_directory / f"{key}.json" if cache_directory else None
     if cache and cache.is_file():
         response = cache.read_text()
@@ -74,17 +75,17 @@ def select(candidates: list[str], deterministic: set[str], prompt: dict, transpo
             response = transport({**prompt, "temperature": 0, "candidates": candidates})
         except Exception:
             return Selection(tuple(sorted(candidates)), True, "provider failure", key)
-        if cache:
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            cache.write_text(response)
     try:
         decoded = json.loads(response)
         selected = decoded["selected"]
-        uncertain = decoded.get("uncertain", False)
-        if not isinstance(selected, list) or not isinstance(uncertain, bool) or any(not isinstance(value, str) or value not in candidates for value in selected):
+        uncertain = decoded.get("uncertain")
+        if set(decoded) != {"selected", "uncertain"} or not isinstance(selected, list) or not isinstance(uncertain, bool) or any(not isinstance(value, str) or value not in candidates for value in selected):
             raise ValueError
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return Selection(tuple(sorted(candidates)), True, "invalid response", key)
+    if cache and not cache.is_file():
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps({"selected": selected, "uncertain": uncertain}, sort_keys=True))
     if uncertain:
         return Selection(tuple(sorted(set(candidates) | deterministic)), True, "model uncertainty", key)
     return Selection(tuple(sorted(set(selected) | deterministic)), False, "additive semantic selection", key)

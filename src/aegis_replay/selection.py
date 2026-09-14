@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from .antibodies import AntibodyError, load
@@ -14,7 +15,10 @@ class SelectionError(ValueError):
     """Candidate registry cannot be read safely."""
 
 
-def rank_repository(repository: Path, changed_paths: list[str]) -> list[Ranked]:
+SENSITIVE = re.compile(r"(?:gh[pousr]_[A-Za-z0-9]+|sk-[A-Za-z0-9]+|bearer\s+\S+|(?:password|token)\s*=\s*\S+)", re.I)
+
+
+def rank_repository(repository: Path, changed_paths: list[str], limit: bool = True) -> list[Ranked]:
     if not changed_paths or not all(_safe_path(path) for path in changed_paths):
         raise SelectionError("changed paths must be safe repository paths")
     records: list[dict[str, object]] = []
@@ -29,7 +33,31 @@ def rank_repository(repository: Path, changed_paths: list[str]) -> list[Ranked]:
         if _matches(antibody.scope, changed_paths):
             deterministic.add(antibody.id)
     query = " ".join(changed_paths + [str(record["jira"]) for record in records])
-    return rank(query, records, deterministic)
+    return rank(query, records, deterministic, limit=limit)
+
+
+def semantic_prompt(repository: Path, changed_paths: list[str], symbols: list[str], diff: str, commit: str, model: str) -> dict:
+    """Build bounded, sanitized selector context from immutable repository inputs."""
+    if not re.fullmatch(r"[a-f0-9]{7,64}", commit) or not model:
+        raise SelectionError("semantic selection requires immutable commit and model")
+    if not all(isinstance(symbol, str) and 0 < len(symbol) <= 128 and "\n" not in symbol for symbol in symbols):
+        raise SelectionError("symbols must be short single-line values")
+    antibodies: list[dict[str, object]] = []
+    for path in sorted((repository / ".aegis" / "antibodies").glob("*.json")):
+        try:
+            antibody = load(repository, path.stem)
+            digest = linked_content_hash(repository, antibody.id)
+        except (AntibodyError, JiraError, OSError, json.JSONDecodeError) as error:
+            raise SelectionError(f"cannot load antibody candidate: {path.stem}") from error
+        antibodies.append({"id": antibody.id, "invariant": antibody.invariant, "target": antibody.target, "scope": antibody.scope, "jira_content_sha256": digest or ""})
+    return {
+        "commit": commit,
+        "model": model,
+        "paths": sorted(changed_paths),
+        "symbols": sorted(symbols),
+        "diff_hunks": _sanitize_diff(diff),
+        "antibodies": antibodies,
+    }
 
 
 def _intent(repository: Path, antibody_id: str) -> str:
@@ -47,3 +75,8 @@ def _matches(scope: list[str], changed: list[str]) -> bool:
 
 def _safe_path(value: object) -> bool:
     return isinstance(value, str) and value and not value.startswith("/") and ".." not in Path(value).parts
+
+
+def _sanitize_diff(value: str) -> str:
+    lines = [SENSITIVE.sub("[redacted]", line) for line in value.splitlines() if line.startswith(("@@", "+", "-", " "))]
+    return "\n".join(lines)[:6000]
