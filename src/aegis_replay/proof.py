@@ -95,7 +95,9 @@ def _run_state(repository: Path, target: Target, name: str, patch: Path | None, 
             output = outputs[0]
             actual = _junit_outcomes(output)
             if not set(expected).issubset(actual) or (passing and set(actual) != set(expected)) or any(actual[item] != passing for item in expected):
-                raise ProofError(f"{name}: JUnit outcomes do not match exact expected tests")
+                expected_names = sorted(f"{class_name}#{test_name}" for class_name, test_name in expected)
+                actual_names = sorted(f"{class_name}#{test_name}" for class_name, test_name in actual)
+                raise ProofError(f"{name}: JUnit outcomes do not match expected={expected_names} actual={actual_names}")
             if passing and result.returncode != 0:
                 raise ProofError(f"{name}: passing JUnit run returned {result.returncode}")
             if not passing and result.returncode == 0:
