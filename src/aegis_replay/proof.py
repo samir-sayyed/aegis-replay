@@ -83,7 +83,7 @@ def _run_state(repository: Path, target: Target, name: str, patch: Path | None, 
             result = subprocess.run(
                 target.proof_command or target.command,
                 cwd=working_directory,
-                env={"PATH": os.environ.get("PATH", ""), **target.environment},
+                env=_runner_environment(target),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -145,6 +145,16 @@ def _git(repository: Path, *arguments: str) -> str:
     if result.returncode != 0:
         raise ProofError(result.stderr.strip() or "Git operation failed")
     return result.stdout
+
+
+def _runner_environment(target: Target) -> dict[str, str]:
+    """Keep only runtime-discovery variables needed by supported toolchains."""
+    environment = {"PATH": os.environ.get("PATH", "")}
+    for name in ("JAVA_HOME", "JAVA_HOME_22_ARM64", "JAVA_HOME_22_X64"):
+        value = os.environ.get(name)
+        if value:
+            environment[name] = value
+    return {**environment, **target.environment}
 
 
 def _hash_file(path: Path) -> str:

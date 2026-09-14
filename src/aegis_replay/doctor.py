@@ -44,7 +44,12 @@ def diagnose_identities(target: Target, repository: Path, identities: list[tuple
 
 
 def _run(target: Target, repository: Path) -> None:
-    environment = {"PATH": os.environ.get("PATH", ""), **target.environment}
+    environment = {"PATH": os.environ.get("PATH", "")}
+    for name in ("JAVA_HOME", "JAVA_HOME_22_ARM64", "JAVA_HOME_22_X64"):
+        value = os.environ.get(name)
+        if value:
+            environment[name] = value
+    environment.update(target.environment)
     try:
         completed = subprocess.run(target.command, cwd=repository, env=environment, capture_output=True, text=True, timeout=120, check=False)
     except (OSError, subprocess.TimeoutExpired) as error:
