@@ -1,3 +1,5 @@
+import pytest
+
 from aegis_replay.semantic import litellm_transport, select
 from aegis_replay.selection import semantic_prompt
 
@@ -10,8 +12,10 @@ def test_semantic_selection_cannot_remove_deterministic_candidate(tmp_path) -> N
 
 def test_invalid_or_uncertain_provider_response_runs_all_candidates() -> None:
     invalid = select(["a", "b"], {"a"}, {"commit": "1"}, lambda _: "not json")
+    duplicate = select(["a", "b"], {"a"}, {"commit": "1"}, lambda _: '{"selected":["b","b"],"uncertain":false}')
     uncertain = select(["a", "b"], {"a"}, {"commit": "2"}, lambda _: '{"selected":["b"],"uncertain":true}')
     assert invalid.ids == ("a", "b") and invalid.fallback
+    assert duplicate.ids == ("a", "b") and duplicate.fallback
     assert uncertain.ids == ("a", "b") and uncertain.fallback
 
 
@@ -34,7 +38,22 @@ def test_litellm_transport_uses_zero_temperature_and_json_response() -> None:
     assert endpoint == "https://llm.example/v1/chat/completions"
     assert headers["Authorization"] == "Bearer secret"
     assert body["model"] == "safe-model" and body["temperature"] == 0
+    assert body["response_format"]["type"] == "json_schema"
+    assert body["response_format"]["json_schema"]["strict"] is True
     assert timeout == 10
+
+
+def test_litellm_transport_retries_once_then_fails_closed() -> None:
+    calls = []
+
+    def request(*_):
+        calls.append(1)
+        raise TimeoutError("provider unavailable")
+
+    transport = litellm_transport("https://llm.example/v1", "safe-model", "secret", request=request)
+    with pytest.raises(RuntimeError):
+        transport({"paths": ["service/audio.py"]})
+    assert len(calls) == 2
 
 
 def test_cache_key_binds_candidates_and_semantic_prompt_is_bounded_and_redacted(tmp_path) -> None:

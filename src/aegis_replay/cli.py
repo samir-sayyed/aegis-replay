@@ -161,14 +161,20 @@ def main(argv: list[str] | None = None) -> int:
                 "configuration_sha256": _hash_file(repository / "aegis.yaml"),
                 "registry_sha256": _hash_registry(repository),
             }
+            if decision:
+                inputs.update({
+                    "commit_sha256": _hash_text(args.commit),
+                    "jira_context_sha256": _hash_text(json.dumps([item.get("jira_content_sha256", "") for item in prompt["antibodies"]], sort_keys=True)),
+                    "semantic_prompt_sha256": _hash_text(json.dumps(prompt, sort_keys=True, separators=(",", ":"))),
+                })
             record = write_manifest(
                 repository,
                 inputs,
                 result["rankings"],
                 [item.id for item in rankings],
-                "none",
-                "none",
-                "bm25-v1",
+                decision.reason if decision and decision.fallback else "none",
+                prompt["model"] if decision else "none",
+                "semantic-v1" if decision else "bm25-v1",
             )
             result["manifest"] = str(record.relative_to(repository))
         print(json.dumps(result, sort_keys=True))

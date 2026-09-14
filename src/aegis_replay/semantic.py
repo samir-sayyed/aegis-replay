@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Callable
 from urllib.request import Request, urlopen
 
+REQUEST_TIMEOUT_SECONDS = 10
+REQUEST_ATTEMPTS = 2
+MAX_RESPONSE_BYTES = 8_192
+
 
 @dataclass(frozen=True)
 class Selection:
@@ -33,7 +37,22 @@ def litellm_transport(
         body = {
             "model": model,
             "temperature": 0,
-            "response_format": {"type": "json_object"},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "aegis_selection",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["selected", "uncertain"],
+                        "properties": {
+                            "selected": {"type": "array", "items": {"type": "string"}},
+                            "uncertain": {"type": "boolean"},
+                        },
+                    },
+                },
+            },
             "messages": [
                 {"role": "system", "content": "Return only JSON with selected array and uncertain boolean."},
                 {"role": "user", "content": json.dumps(prompt, sort_keys=True, separators=(",", ":"))},
@@ -41,11 +60,11 @@ def litellm_transport(
         }
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         error: Exception | None = None
-        for _ in range(2):
+        for _ in range(REQUEST_ATTEMPTS):
             try:
-                response = post(base_url.rstrip("/") + "/chat/completions", headers, body, 10)
+                response = post(base_url.rstrip("/") + "/chat/completions", headers, body, REQUEST_TIMEOUT_SECONDS)
                 content = response["choices"][0]["message"]["content"]
-                if not isinstance(content, str):
+                if not isinstance(content, str) or len(content.encode("utf-8")) > MAX_RESPONSE_BYTES:
                     raise ValueError("LiteLLM response content is malformed")
                 return content
             except Exception as current:
@@ -79,7 +98,7 @@ def select(candidates: list[str], deterministic: set[str], prompt: dict, transpo
         decoded = json.loads(response)
         selected = decoded["selected"]
         uncertain = decoded.get("uncertain")
-        if set(decoded) != {"selected", "uncertain"} or not isinstance(selected, list) or not isinstance(uncertain, bool) or any(not isinstance(value, str) or value not in candidates for value in selected):
+        if set(decoded) != {"selected", "uncertain"} or not isinstance(selected, list) or not isinstance(uncertain, bool) or len(selected) != len(set(selected)) or any(not isinstance(value, str) or value not in candidates for value in selected):
             raise ValueError
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return Selection(tuple(sorted(candidates)), True, "invalid response", key)
