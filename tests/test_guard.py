@@ -72,6 +72,12 @@ def test_guard_fails_closed_when_registry_record_is_deleted_or_dependency_change
     assert dependency.returncode == 0 and "pass" in dependency.stdout
 
 
+def test_guard_fails_closed_for_unsafe_changed_path(tmp_path: Path) -> None:
+    setup_guard(tmp_path)
+    result = cli(tmp_path, "guard", "--directory", str(tmp_path), "--changed", "../outside.py")
+    assert result.returncode == 1 and "invalid" in result.stdout
+
+
 def test_guard_matches_exact_protected_test_symbols_only() -> None:
     tests = [{"class": "service.Audio", "name": "restores"}]
     assert _symbol_matches(tests, ["service.Audio#restores"])

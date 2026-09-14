@@ -15,7 +15,7 @@ from .batching import plan
 
 def guard(repository: Path, changed_paths: list[str], symbols: list[str] | None = None) -> str:
     symbols = symbols or []
-    if any(path.startswith(".aegis/") for path in changed_paths):
+    if not changed_paths or any(not _safe_changed_path(path) or path.startswith(".aegis/") for path in changed_paths):
         return "invalid"
     select_all = "*" in changed_paths or any(_global_input(path) for path in changed_paths)
     candidates = sorted((repository / ".aegis" / "antibodies").glob("*.json"))
@@ -76,6 +76,10 @@ def _global_input(path: str) -> bool:
         "pnpm-lock.yaml", "yarn.lock", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts",
         "gradle.properties", "Podfile.lock", "Package.swift", "Gemfile.lock",
     } or path.endswith((".xml", ".xcresult"))
+
+
+def _safe_changed_path(path: object) -> bool:
+    return isinstance(path, str) and bool(path) and not path.startswith("/") and ".." not in Path(path).parts
 
 
 def _approved(repository: Path, identifier: str) -> bool:

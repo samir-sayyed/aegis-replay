@@ -4,6 +4,10 @@ inputs:
   changed-paths:
     description: Newline-delimited changed repository paths.
     required: true
+  changed-symbols:
+    description: Optional newline-delimited changed symbol identities.
+    required: false
+    default: ''
 outputs:
   result:
     description: "Stable guard result: pass, recurrence, invalid, or indeterminate."
@@ -18,17 +22,27 @@ runs:
       run: python -m pip install "$GITHUB_ACTION_PATH"
     - id: guard
       shell: bash
+      env:
+        CHANGED_PATHS: ${{ inputs.changed-paths }}
+        CHANGED_SYMBOLS: ${{ inputs.changed-symbols }}
       run: |
-        set -o pipefail
+        set -euo pipefail
         args=()
-        while IFS= read -r path; do args+=(--changed "$path"); done <<< "${{ inputs.changed-paths }}"
+        symbol_args=()
+        while IFS= read -r path; do
+          [ -z "$path" ] || args+=(--changed "$path")
+        done <<< "$CHANGED_PATHS"
+        while IFS= read -r symbol; do
+          [ -z "$symbol" ] || symbol_args+=(--symbol "$symbol")
+        done <<< "$CHANGED_SYMBOLS"
+        test "${#args[@]}" -gt 0
         if [ -f aegis.yaml ]; then
-          aegis select --manifest "${args[@]}" >/dev/null
+          aegis select --manifest "${args[@]}" "${symbol_args[@]}" >/dev/null
           manifest="$(find .aegis/manifests -maxdepth 1 -name '*.json' -print -quit)"
           echo "manifest=$manifest" >> "$GITHUB_OUTPUT"
         fi
         set +e
-        output="$(aegis guard "${args[@]}")"
+        output="$(aegis guard "${args[@]}" "${symbol_args[@]}")"
         status=$?
         set -e
         printf '%s\n' "$output"
