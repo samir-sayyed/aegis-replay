@@ -10,6 +10,7 @@ from .approval import ApprovalError, _git_head
 from .doctor import DoctorError, diagnose_identities
 from .proof import freshness
 from .config import load_target
+from .batching import plan
 
 
 def guard(repository: Path, changed_paths: list[str]) -> str:
@@ -28,12 +29,31 @@ def guard(repository: Path, changed_paths: list[str]) -> str:
             return "invalid"
     if not selected:
         return "pass"
-    for antibody in selected:
+    revision = _git_head(repository)
+    batches = plan(
+        [
+            {"id": antibody.id, "target": antibody.target, "revision": revision, "test": (test["class"], test["name"])}
+            for antibody in selected
+            for test in antibody.tests
+        ]
+    )
+    for items in batches.values():
         try:
-            diagnose_identities(load_target(repository / "aegis.yaml", antibody.target), repository, [(test["class"], test["name"]) for test in antibody.tests])
+            diagnose_identities(load_target(repository / "aegis.yaml", items[0]["target"]), repository, [item["test"] for item in items])
         except DoctorError:
-            return "recurrence"
+            if not _run_isolated(repository, items):
+                return "recurrence"
     return "pass"
+
+
+def _run_isolated(repository: Path, items: list[dict]) -> bool:
+    target = load_target(repository / "aegis.yaml", items[0]["target"])
+    try:
+        for item in items:
+            diagnose_identities(target, repository, [item["test"]])
+    except DoctorError:
+        return False
+    return True
 
 
 def _matches(scope: list[str], changed: list[str]) -> bool:
