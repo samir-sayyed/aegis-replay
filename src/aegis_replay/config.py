@@ -15,7 +15,7 @@ class ConfigurationError(ValueError):
 
 SHELL_TOKENS = (";", "|", "&", ">", "<", "`", "$", "\n", "\r")
 SUPPORTED_RUNNERS = frozenset({"command-junit", "gradle-junit", "pytest-junit", "jest-junit", "xcode-junit"})
-ALLOWED_ENVIRONMENT = frozenset({"CI", "LANG", "LC_ALL", "TZ"})
+ALLOWED_ENVIRONMENT = frozenset({"CI", "LANG", "LC_ALL", "TZ", "PYTHONDONTWRITEBYTECODE"})
 
 
 @dataclass(frozen=True)

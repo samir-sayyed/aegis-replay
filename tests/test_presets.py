@@ -21,3 +21,13 @@ def test_target_accepts_safe_scope_and_aegis_owned_selector(tmp_path: Path) -> N
     target = load_target(config, "swift")
     assert target.scope == ("Sources", "Tests")
     assert target.environment["AEGIS_XCODE_ONLY_TESTING"] == "AppTests/StatusTests/testActive"
+
+
+def test_python_bytecode_control_is_a_safe_runtime_environment(tmp_path: Path) -> None:
+    config = tmp_path / "aegis.yaml"
+    config.write_text(
+        "schema_version: 1\ntargets:\n  - name: python\n    runner: pytest-junit\n"
+        "    command: [python, -m, pytest]\n    junit_xml: reports/junit.xml\n"
+        "    environment: {PYTHONDONTWRITEBYTECODE: '1'}\n"
+    )
+    assert load_target(config, "python").environment["PYTHONDONTWRITEBYTECODE"] == "1"
