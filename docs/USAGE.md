@@ -20,3 +20,10 @@ Fork PRs run under `pull_request` with read-only permissions and `guard --all`.
 They never receive Jira, model, signing, or deployment secrets; live integrations
 are maintainer-dispatched only. Quiet Hours migration is intentionally outside
 this MVP.
+
+## Release maintainers
+
+Before first release, configure PyPI Trusted Publishing for this repository and
+release workflow. Build distribution with `python -m build`, inspect with
+`twine check dist/*`, then publish immutable `vX.Y.Z` release. Consumers pin
+package versions and action commits; never pin branches.
