@@ -1,0 +1,49 @@
+name: Aegis maintainer integrations
+on:
+  workflow_dispatch:
+    inputs:
+      jira_key:
+        description: Jira issue key to capture
+        required: true
+        type: string
+      jira_url:
+        description: HTTPS Jira Cloud base URL
+        required: true
+        type: string
+      changed_path:
+        description: One changed path for semantic selection
+        required: true
+        default: aegis.yaml
+        type: string
+permissions:
+  contents: read
+jobs:
+  capture-and-select:
+    # Configure this protected environment with maintainer reviewers and its
+    # JIRA_EMAIL, JIRA_API_TOKEN, LITELLM_API_KEY, and LITELLM_BASE_URL secrets.
+    environment: aegis-maintainers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: python -m pip install .
+      - name: Capture sanitized Jira intent
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_KEY: ${{ inputs.jira_key }}
+          JIRA_URL: ${{ inputs.jira_url }}
+        run: |
+          aegis jira capture --key "$JIRA_KEY" --jira-url "$JIRA_URL"
+      - name: Run maintainer-only semantic selection
+        env:
+          LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+          LITELLM_BASE_URL: ${{ secrets.LITELLM_BASE_URL }}
+          CHANGED_PATH: ${{ inputs.changed_path }}
+        run: |
+          aegis select --changed "$CHANGED_PATH" --semantic --commit "$GITHUB_SHA" --manifest

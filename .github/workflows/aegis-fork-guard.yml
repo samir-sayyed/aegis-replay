@@ -10,7 +10,7 @@ jobs:
     if: ${{ !github.event.pull_request.head.repo.fork }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
@@ -39,10 +39,13 @@ jobs:
     if: ${{ github.event.pull_request.head.repo.fork }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # pull_request never exposes repository secrets to fork code.
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - uses: ./
+      # Trusted immutable action code runs against untrusted checkout. "*"
+      # deliberately exercises every committed, approved antibody.
+      - uses: samir-sayyed/aegis-replay@9047e572ad1b3f7b6e3045b0bda7969518c03a0a
         with:
           changed-paths: '*'
