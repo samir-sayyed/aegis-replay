@@ -26,6 +26,7 @@ class Target:
     environment: dict[str, str]
     directory: str
     scope: tuple[str, ...]
+    proof_command: tuple[str, ...] = ()
 
 
 def load_target(config_path: Path, target_name: str | None) -> Target:
@@ -49,6 +50,7 @@ def _parse_target(raw: dict[str, Any]) -> Target:
         raise ConfigurationError("runner must be a supported JUnit preset")
     name = raw.get("name")
     command = raw.get("command")
+    proof_command = raw.get("proof_command", command)
     junit_xml = raw.get("junit_xml")
     environment = raw.get("environment", {})
     directory = raw.get("directory", ".")
@@ -61,6 +63,12 @@ def _parse_target(raw: dict[str, Any]) -> Target:
         raise ConfigurationError("command must not contain shell syntax")
     if "/" in command[0] and ".." in Path(command[0]).parts:
         raise ConfigurationError("command path must not traverse outside repository")
+    if not isinstance(proof_command, list) or not proof_command or not all(isinstance(value, str) and value for value in proof_command):
+        raise ConfigurationError("proof_command must be a non-empty argv list")
+    if any(token in value for value in proof_command for token in SHELL_TOKENS):
+        raise ConfigurationError("proof_command must not contain shell syntax")
+    if "/" in proof_command[0] and ".." in Path(proof_command[0]).parts:
+        raise ConfigurationError("proof_command path must not traverse outside repository")
     if not isinstance(junit_xml, str) or not _is_safe_relative_path(junit_xml):
         raise ConfigurationError("junit_xml must be a safe relative path")
     if not isinstance(directory, str) or not _is_safe_relative_path(directory):
@@ -71,7 +79,7 @@ def _parse_target(raw: dict[str, Any]) -> Target:
         raise ConfigurationError("environment contains disallowed values")
     if not isinstance(scope, list) or not all(isinstance(value, str) and _is_safe_relative_path(value) for value in scope):
         raise ConfigurationError("scope must contain safe relative paths")
-    return Target(name, tuple(command), junit_xml, environment, directory, tuple(scope))
+    return Target(name, tuple(command), junit_xml, environment, directory, tuple(scope), tuple(proof_command))
 
 
 def _is_safe_relative_path(value: str) -> bool:

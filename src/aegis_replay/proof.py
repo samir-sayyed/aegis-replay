@@ -80,7 +80,7 @@ def _run_state(repository: Path, target: Target, name: str, patch: Path | None, 
                 _git(workspace, "apply", str(patch))
             working_directory = workspace / target.directory
             result = subprocess.run(
-                target.command,
+                target.proof_command or target.command,
                 cwd=working_directory,
                 env={"PATH": os.environ.get("PATH", ""), **target.environment},
                 capture_output=True,
@@ -171,4 +171,4 @@ def _current_inputs(repository: Path, antibody: Antibody, target: Target) -> dic
 
 
 def _execution_input(target: Target) -> dict[str, object]:
-    return {"command": target.command, "directory": target.directory, "environment": target.environment, "junit_xml": target.junit_xml}
+    return {"command": target.command, "proof_command": target.proof_command or target.command, "directory": target.directory, "environment": target.environment, "junit_xml": target.junit_xml}

@@ -74,3 +74,12 @@ def test_proof_runs_target_in_declared_directory_and_resolves_junit_glob(tmp_pat
 def test_proof_scope_allows_file_under_declared_directory_only() -> None:
     assert _in_scope("python-pytest/src/poc/greeting.py", ["python-pytest/src"])
     assert not _in_scope("typescript-jest/src/filter.ts", ["python-pytest/src"])
+
+
+def test_proof_uses_declared_proof_command_for_target_and_control(tmp_path: Path) -> None:
+    (tmp_path / "runner.py").write_text("from pathlib import Path\nPath('result.xml').write_text('<testsuite><testcase classname=\"x\" name=\"target\"/><testcase classname=\"x\" name=\"control\"/></testsuite>')\n")
+    git(tmp_path, "init")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "base")
+    target = Target("unit", ("false",), "result.xml", {}, ".", (), (sys.executable, "runner.py"))
+    _run_state(tmp_path, target, "fixed", None, [("x", "target"), ("x", "control")], True)
